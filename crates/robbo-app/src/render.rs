@@ -148,13 +148,15 @@ pub fn sync_visuals(
                 | GameEvent::Teleported { entity_id, from, to } => {
                     if let Some(entity) = entity_map.0.get(entity_id) {
                         if let Ok((_, mut motion)) = motion_q.get_mut(*entity) {
-                            if motion.progress > 0.0 && motion.progress < 1.0 {
-                                motion.from = motion.to;
+                            // Chain from current visual cell when mid-step or already arrived.
+                            motion.from = if motion.from != motion.to && motion.progress < 1.0 {
+                                motion.to
                             } else {
-                                motion.from = *from;
-                            }
+                                *from
+                            };
                             motion.to = *to;
                             motion.progress = 0.0;
+                            motion.duration = crate::bridge::ANIM_SECS;
                         }
                     }
                 }

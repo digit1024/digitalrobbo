@@ -1,6 +1,6 @@
 use crate::cell::Cell;
 use crate::direction::Direction;
-use crate::element::{ElementKind, ElementState};
+use crate::element::{ElementKind, ElementState, GunType};
 use crate::events::{DeathCause, GameEvent};
 use crate::tile::TileKind;
 use crate::world::World;
@@ -207,29 +207,6 @@ impl World {
     }
 
     pub(crate) fn shoot_from_cell(&mut self, from: Cell, dir: Direction, events: &mut Vec<GameEvent>) {
-        let (dc, dr) = dir.delta();
-        let spawn = from.offset(dc, dr);
-        if !self.in_bounds(spawn) {
-            return;
-        }
-        if self.tile_at(spawn).is_some_and(|t| t.blocks_shot()) {
-            return;
-        }
-        if self.element_at(spawn).is_some() {
-            return;
-        }
-        events.push(GameEvent::Shot { from, direction: dir });
-        let pid = self.allocate_id();
-        self.elements.push((
-            spawn,
-            ElementState::new(
-                pid,
-                ElementKind::Projectile {
-                    direction: dir,
-                    from_player: false,
-                },
-                dir,
-            ),
-        ));
+        self.gun_shoot(from, dir, GunType::Regular, None, events);
     }
 }

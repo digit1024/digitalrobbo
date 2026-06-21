@@ -2,7 +2,7 @@
 mod tests {
     use super::super::*;
     use crate::command::CommandHistory;
-    use crate::element::{ElementKind, ElementState, QuestionMarkContent};
+    use crate::element::{ElementKind, ElementState, GunType, QuestionMarkContent};
     use crate::events::{DeathCause, GameEvent, PlayerInput};
     use crate::tile::TileKind;
     use crate::world::{LevelStatus, World};
@@ -417,5 +417,125 @@ mod tests {
         world.turn_robbo(Direction::Right);
         world.step(PlayerInput::Shoot(Direction::Right));
         assert_eq!(world.ammo, 1);
+    }
+
+    #[test]
+    fn regular_gun_spawns_single_moving_laser() {
+        let w = 8u16;
+        let h = 4u16;
+        let tiles = vec![TileKind::Empty; (w * h) as usize];
+        let elements = vec![(
+            Cell::new(2, 1),
+            ElementState::new(
+                2,
+                ElementKind::Gun {
+                    gun_type: GunType::Regular,
+                    direction: Direction::Right,
+                    move_dir: Direction::Right,
+                    movable: false,
+                    rotatable: false,
+                    random_rotate: false,
+                },
+                Direction::Right,
+            ),
+        )];
+        let mut world = make_world(w, h, tiles, elements, 0);
+        let mut events = Vec::new();
+        world.gun_shoot(Cell::new(2, 1), Direction::Right, GunType::Regular, Some(2), &mut events);
+        let lasers: Vec<_> = world
+            .elements
+            .iter()
+            .filter(|(_, s)| matches!(s.kind, ElementKind::Laser { solid: false, .. }))
+            .collect();
+        assert_eq!(lasers.len(), 1);
+        assert_eq!(lasers[0].0, Cell::new(3, 1));
+    }
+
+    #[test]
+    fn blaster_gun_spawns_one_cell_not_beam() {
+        let w = 8u16;
+        let h = 4u16;
+        let tiles = vec![TileKind::Empty; (w * h) as usize];
+        let elements = vec![(
+            Cell::new(2, 1),
+            ElementState::new(
+                2,
+                ElementKind::Gun {
+                    gun_type: GunType::Blaster,
+                    direction: Direction::Right,
+                    move_dir: Direction::Right,
+                    movable: false,
+                    rotatable: false,
+                    random_rotate: false,
+                },
+                Direction::Right,
+            ),
+        )];
+        let mut world = make_world(w, h, tiles, elements, 0);
+        let mut events = Vec::new();
+        world.gun_shoot(Cell::new(2, 1), Direction::Right, GunType::Blaster, Some(2), &mut events);
+        let blasters: Vec<_> = world
+            .elements
+            .iter()
+            .filter(|(_, s)| matches!(s.kind, ElementKind::BlasterCell { .. }))
+            .collect();
+        assert_eq!(blasters.len(), 1);
+        assert_eq!(blasters[0].0, Cell::new(3, 1));
+    }
+
+    #[test]
+    fn laser_gun_extends_one_solid_segment_per_shot() {
+        let w = 10u16;
+        let h = 4u16;
+        let tiles = vec![TileKind::Empty; (w * h) as usize];
+        let elements = vec![(
+            Cell::new(2, 1),
+            ElementState::new(
+                2,
+                ElementKind::Gun {
+                    gun_type: GunType::Laser,
+                    direction: Direction::Right,
+                    move_dir: Direction::Right,
+                    movable: false,
+                    rotatable: false,
+                    random_rotate: false,
+                },
+                Direction::Right,
+            ),
+        )];
+        let mut world = make_world(w, h, tiles, elements, 0);
+        let mut events = Vec::new();
+        world.gun_shoot(Cell::new(2, 1), Direction::Right, GunType::Laser, Some(2), &mut events);
+        let solid: Vec<_> = world
+            .elements
+            .iter()
+            .filter(|(_, s)| matches!(s.kind, ElementKind::Laser { solid: true, .. }))
+            .collect();
+        assert_eq!(solid.len(), 1);
+        assert_eq!(solid[0].0, Cell::new(3, 1));
+    }
+
+    #[test]
+    fn bear_prefers_left_opening_in_maze() {
+        let w = 6u16;
+        let h = 5u16;
+        let mut tiles = vec![TileKind::Empty; (w * h) as usize];
+        tiles[8] = TileKind::WallSolid; // block forward from (1,1) going right
+        let elements = vec![(
+            Cell::new(1, 1),
+            ElementState::new(2, ElementKind::Bear { clockwise: false }, Direction::Right),
+        )];
+        let mut world = make_world(w, h, tiles, elements, 0);
+        world.sensible_bears = false;
+        world.step(PlayerInput::Wait);
+        world.step(PlayerInput::Wait);
+        world.step(PlayerInput::Wait);
+        world.step(PlayerInput::Wait);
+        let bear_cell = world
+            .elements
+            .iter()
+            .find(|(_, s)| matches!(s.kind, ElementKind::Bear { .. }))
+            .map(|(c, _)| *c);
+        assert_eq!(bear_cell, Some(Cell::new(1, 0)));
     }
 }

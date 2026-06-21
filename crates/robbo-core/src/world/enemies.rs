@@ -1,6 +1,6 @@
 use crate::cell::Cell;
 use crate::direction::Direction;
-use crate::element::{BirdVariant, ElementKind, ElementState, roll_one_in_eight};
+use crate::element::{BirdVariant, ElementKind, ElementState, GunType, roll_one_in_eight};
 use crate::events::{DeathCause, GameEvent};
 use crate::world::World;
 
@@ -36,24 +36,30 @@ impl World {
 
             let mut direction = state.direction;
             let new_cell = match &state.kind {
-                ElementKind::Bear { clockwise } | ElementKind::BlackBear { clockwise } => {
-                    let (next, new_dir) = self.wall_follow_with_dir(*cell, direction, *clockwise);
+                ElementKind::Bear { .. } => {
+                    let (next, new_dir) =
+                        self.bear_step(*cell, direction, false, self.sensible_bears);
+                    direction = new_dir;
+                    next
+                }
+                ElementKind::BlackBear { .. } => {
+                    let (next, new_dir) =
+                        self.bear_step(*cell, direction, true, self.sensible_bears);
                     direction = new_dir;
                     next
                 }
                 ElementKind::Bird { variant, shooting } => {
-                    if *shooting && roll_one_in_eight(&mut self.rng_state) {
-                        bird_shots.push((*cell, state.shot_direction));
-                    }
+                    let mut pos = *cell;
                     match variant {
                         BirdVariant::Horizontal => {
                             let (dc, _) = direction.delta();
                             let next = cell.offset(dc, 0);
                             if self.is_blocked_for_enemy(next) {
                                 direction = direction.opposite();
-                                cell.offset(direction.delta().0, 0)
+                                let (dc, _) = direction.delta();
+                                pos = cell.offset(dc, 0);
                             } else {
-                                next
+                                pos = next;
                             }
                         }
                         BirdVariant::Vertical => {
@@ -61,18 +67,24 @@ impl World {
                             let next = cell.offset(0, dr);
                             if self.is_blocked_for_enemy(next) {
                                 direction = direction.opposite();
-                                cell.offset(0, direction.delta().1)
+                                let (_, dr) = direction.delta();
+                                pos = cell.offset(0, dr);
                             } else {
-                                next
+                                pos = next;
                             }
                         }
-                        BirdVariant::Firing => {
-                            bird_shots.push((*cell, state.shot_direction));
-                            *cell
-                        }
+                        BirdVariant::Firing => {}
                     }
+                    if *shooting && roll_one_in_eight(&mut self.rng_state) {
+                        bird_shots.push((pos, state.shot_direction));
+                    }
+                    pos
                 }
-                ElementKind::Butterfly => self.butterfly_step(*cell, id),
+                ElementKind::Butterfly => {
+                    let moved = self.butterfly_move(*cell, direction);
+                    direction = self.butterfly_next_direction(moved);
+                    moved
+                }
                 _ => *cell,
             };
 
@@ -117,85 +129,140 @@ impl World {
         }
 
         for (from, dir) in bird_shots {
-            self.shoot_from_cell(from, dir, events);
+            self.gun_shoot(from, dir, GunType::Regular, None, events);
         }
     }
 
-    fn butterfly_step(&mut self, cell: Cell, id: u32) -> Cell {
-        let robbo = self.robbo_cell();
-        let dirs = [
-            Direction::Up,
-            Direction::Down,
-            Direction::Left,
-            Direction::Right,
-        ];
-        if roll_one_in_eight(&mut self.rng_state) {
-            let pick = (self.tick as usize + id as usize) % dirs.len();
-            let d = dirs[pick];
-            let (dc, dr) = d.delta();
-            let next = cell.offset(dc, dr);
-            if !self.is_blocked_for_enemy(next) {
-                return next;
-            }
-            return cell;
-        }
-        let Some(robbo) = robbo else {
-            return cell;
-        };
-        let h_first = (self.tick + id as u64) & 1 == 0;
-        let try_dirs: [Direction; 2] = if h_first {
-            if robbo.col != cell.col {
-                if robbo.col > cell.col {
-                    [Direction::Right, Direction::Left]
-                } else {
-                    [Direction::Left, Direction::Right]
-                }
-            } else if robbo.row > cell.row {
-                [Direction::Down, Direction::Up]
-            } else {
-                [Direction::Up, Direction::Down]
-            }
-        } else if robbo.row != cell.row {
-            if robbo.row > cell.row {
-                [Direction::Down, Direction::Up]
-            } else {
-                [Direction::Up, Direction::Down]
-            }
-        } else if robbo.col > cell.col {
-            [Direction::Right, Direction::Left]
-        } else {
-            [Direction::Left, Direction::Right]
-        };
-        for d in try_dirs {
-            let (dc, dr) = d.delta();
-            let next = cell.offset(dc, dr);
-            if !self.is_blocked_for_enemy(next) {
-                return next;
-            }
-        }
-        cell
-    }
-
-    fn wall_follow_with_dir(
+    /// gnurobbo left/right-hand maze rule for BEAR / BEAR_B.
+    fn bear_step(
         &self,
         cell: Cell,
         dir: Direction,
-        clockwise: bool,
+        right_hand: bool,
+        sensible: bool,
     ) -> (Cell, Direction) {
-        let forward = cell.offset(dir.delta().0, dir.delta().1);
-        let turn = if clockwise {
+        let side = if right_hand {
             dir.turn_right()
         } else {
             dir.turn_left()
         };
-        let turned = cell.offset(turn.delta().0, turn.delta().1);
+        let (sdc, sdr) = side.delta();
+        let side_cell = cell.offset(sdc, sdr);
 
-        if !self.is_blocked_for_enemy(forward) {
-            (forward, dir)
-        } else if !self.is_blocked_for_enemy(turned) {
-            (turned, turn)
+        let force_forward = if sensible {
+            self.bear_force_forward(cell, dir, right_hand)
         } else {
-            (cell, dir)
+            false
+        };
+
+        if !force_forward && self.is_bear_maze_empty(side_cell) {
+            let (dc, dr) = side.delta();
+            return (cell.offset(dc, dr), side);
+        }
+
+        let (fdc, fdr) = dir.delta();
+        let forward = cell.offset(fdc, fdr);
+        if self.is_bear_maze_empty(forward) {
+            return (forward, dir);
+        }
+
+        let new_dir = if right_hand {
+            dir.turn_left()
+        } else {
+            dir.turn_right()
+        };
+        (cell, new_dir)
+    }
+
+    fn bear_force_forward(&self, cell: Cell, dir: Direction, right_hand: bool) -> bool {
+        let side_dir = if right_hand {
+            dir.turn_right()
+        } else {
+            dir.turn_left()
+        };
+        let (sdc, sdr) = side_dir.delta();
+        let side_cell = cell.offset(sdc, sdr);
+
+        let behind_side = side_cell.offset(-dir.delta().0, -dir.delta().1);
+        let behind_dir = if right_hand {
+            dir.turn_left()
+        } else {
+            dir.turn_right()
+        };
+        let (bdc, bdr) = behind_dir.delta();
+        let behind = behind_side.offset(bdc, bdr);
+
+        let self_type = if right_hand { 2u8 } else { 1 };
+
+        self.is_bear_maze_empty(side_cell)
+            && self.is_bear_maze_empty(behind)
+            && (self.is_bear_maze_empty(behind_side)
+                || self.bear_maze_type(behind_side) == self_type)
+    }
+
+    fn bear_maze_type(&self, cell: Cell) -> u8 {
+        if let Some((_, el)) = self.element_at(cell) {
+            match el.kind {
+                ElementKind::Bear { .. } => 1,
+                ElementKind::BlackBear { .. } => 2,
+                _ => 0,
+            }
+        } else {
+            0
+        }
+    }
+
+    fn is_bear_maze_empty(&self, cell: Cell) -> bool {
+        if !self.in_bounds(cell) {
+            return false;
+        }
+        if self.tile_at(cell).is_some_and(|t| t.blocks_movement()) {
+            return false;
+        }
+        self.element_at(cell).is_none()
+    }
+
+    fn butterfly_move(&self, cell: Cell, direction: Direction) -> Cell {
+        let (dc, dr) = direction.delta();
+        let next = cell.offset(dc, dr);
+        if !self.is_blocked_for_enemy(next) {
+            next
+        } else {
+            cell
+        }
+    }
+
+    fn butterfly_next_direction(&mut self, cell: Cell) -> Direction {
+        if roll_one_in_eight(&mut self.rng_state) {
+            let dirs = [
+                Direction::Right,
+                Direction::Down,
+                Direction::Left,
+                Direction::Up,
+            ];
+            return dirs[(self.tick as usize) % dirs.len()];
+        }
+        let Some(robbo) = self.robbo_cell() else {
+            return Direction::Down;
+        };
+        if (self.tick & 1) == 0 {
+            if robbo.col > cell.col {
+                Direction::Right
+            } else if robbo.col < cell.col {
+                Direction::Left
+            } else if robbo.row > cell.row {
+                Direction::Down
+            } else {
+                Direction::Up
+            }
+        } else if robbo.row > cell.row {
+            Direction::Down
+        } else if robbo.row < cell.row {
+            Direction::Up
+        } else if robbo.col > cell.col {
+            Direction::Right
+        } else {
+            Direction::Left
         }
     }
 }

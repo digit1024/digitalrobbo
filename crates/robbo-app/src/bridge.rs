@@ -8,7 +8,8 @@ use crate::input::SteeringState;
 use crate::ui::LevelCountdown;
 
 pub const TICK_SECS: f32 = 0.14; // ~7 ticks/s — enemies/guns advance at this rate
-pub const ANIM_SECS: f32 = 0.10; // visual tween duration (must be < TICK_SECS)
+/// Visual step length — always equals one sim tick (Robbo, enemies, bullets, pushed boxes).
+pub const ANIM_SECS: f32 = TICK_SECS;
 
 #[derive(Event, Clone, Debug)]
 pub struct CoreGameEvent(pub GameEvent);
