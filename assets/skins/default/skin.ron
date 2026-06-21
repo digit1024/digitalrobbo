@@ -1,0 +1,24 @@
+(
+    name: "default",
+    tile_size: 32,
+    palette: (
+        primary: "#4A6B8A",
+        secondary: "#7D5C34",
+        background: "#1A1A2E",
+        accent: "#E67E22",
+    ),
+    tiles: {
+        "wall_grey": ( atlas: "tiles.png", x: 0, y: 0, w: 32, h: 32 ),
+        "empty": ( atlas: "tiles.png", x: 32, y: 0, w: 32, h: 32 ),
+        "screw": ( atlas: "entities.png", x: 0, y: 32, w: 32, h: 32 ),
+    },
+    entities: {
+        "robbo": (
+            atlas: "entities.png",
+            animations: {
+                "walk_down": ( frames: [(0, 0), (1, 0), (2, 0), (3, 0)], fps: 8.0, loop: true ),
+                "idle_down": ( frames: [(0, 0)], fps: 1.0, loop: true ),
+            },
+        ),
+    },
+)

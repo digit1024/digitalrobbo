@@ -1,0 +1,14 @@
+[build]
+target = "crates/robbo-app/index.html"
+dist = "dist"
+
+[serve]
+port = 8080
+
+[watch]
+ignore = ["dist"]
+
+[[copy]]
+source = "assets/levels"
+destination = "levels"
+

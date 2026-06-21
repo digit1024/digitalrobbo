@@ -1,0 +1,21 @@
+(
+    name: "isometric",
+    tile_size: 64,
+    palette: (
+        primary: "#4A6B8A",
+        secondary: "#7D5C34",
+        background: "#1A1A2E",
+        accent: "#E67E22",
+    ),
+    tiles: {
+        "wall_grey": ( atlas: "iso_tiles.png", x: 0, y: 0, w: 64, h: 48 ),
+    },
+    entities: {
+        "robbo": (
+            atlas: "iso_entities.png",
+            animations: {
+                "idle": ( frames: [(0, 0)], fps: 1.0, loop: true ),
+            },
+        ),
+    },
+)

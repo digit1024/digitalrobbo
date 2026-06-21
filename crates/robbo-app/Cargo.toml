@@ -1,0 +1,22 @@
+[package]
+name = "robbo-app"
+description = "DigitalRobbo Bevy front-end"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[[bin]]
+name = "digitalrobbo"
+path = "src/main.rs"
+
+[dependencies]
+bevy = { workspace = true }
+robbo-core = { path = "../robbo-core" }
+robbo-formats = { path = "../robbo-formats" }
+serde = { workspace = true }
+ron = { workspace = true }
+
+[target.wasm32-unknown-unknown.dependencies]
+getrandom = { version = "0.3", features = ["wasm_js"] }
+web-sys = { version = "0.3", features = ["Window", "Storage"] }

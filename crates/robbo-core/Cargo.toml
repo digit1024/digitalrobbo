@@ -1,0 +1,16 @@
+[package]
+name = "robbo-core"
+description = "Deterministic GNU Robbo simulation core (no Bevy)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[dependencies]
+serde = { workspace = true, optional = true }
+
+[features]
+default = ["serde"]
+serde = ["dep:serde"]
+
+[dev-dependencies]

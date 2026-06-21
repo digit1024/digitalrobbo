@@ -1,0 +1,13 @@
+[package]
+name = "robbo-formats"
+description = "GNU Robbo .dat level pack parser"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[dependencies]
+robbo-core = { path = "../robbo-core" }
+thiserror = { workspace = true }
+
+[dev-dependencies]

@@ -1,0 +1,128 @@
+use bevy::prelude::*;
+use robbo_core::{Direction, ElementKind, GunType, TileKind};
+
+pub const TILE_PX: f32 = 80.0;
+
+/// Pre-loaded image handles for every game element.
+/// Insert as a Resource at startup, then pass into render systems.
+#[derive(Resource)]
+pub struct SpriteAssets {
+    // ── entities ─────────────────────────────────────────────
+    pub robbo: Handle<Image>,
+    pub screw: Handle<Image>,
+    pub capsule: Handle<Image>,
+    pub bomb: Handle<Image>,
+    pub bx: Handle<Image>,
+    pub push_box: Handle<Image>,
+    pub key: Handle<Image>,
+    pub bullet_pickup: Handle<Image>,
+    pub extra_life: Handle<Image>,
+    pub question_mark: Handle<Image>,
+    pub projectile: Handle<Image>,
+    pub teleport: Handle<Image>,
+    pub magnet: Handle<Image>,
+    // bears: [right, front, back, up]
+    pub bear: [Handle<Image>; 4],
+    pub blackbear: [Handle<Image>; 4],
+    pub butterfly: [Handle<Image>; 4],
+    pub bird: Handle<Image>,
+    // guns: [right, down, left, up]
+    pub gun: [Handle<Image>; 4],
+    // ── tiles ────────────────────────────────────────────────
+    pub tile_empty: Handle<Image>,
+    pub tile_wall_grey: Handle<Image>,
+    pub tile_wall_solid: Handle<Image>,
+    pub tile_wall_red: Handle<Image>,
+    pub tile_wall_green: Handle<Image>,
+    pub tile_wall_black: Handle<Image>,
+    pub tile_ground: Handle<Image>,
+    pub tile_door_closed: Handle<Image>,
+    pub tile_barrier: Handle<Image>,
+}
+
+impl SpriteAssets {
+    pub fn load(server: &AssetServer) -> Self {
+        let sp = |name: &str| server.load(format!("sprites/{name}.png"));
+        Self {
+            robbo:        sp("robbo"),
+            screw:        sp("screw"),
+            capsule:      sp("capsule"),
+            bomb:         sp("bomb"),
+            bx:           sp("box"),
+            push_box:     sp("push_box"),
+            key:          sp("key"),
+            bullet_pickup: sp("bullet_pickup"),
+            extra_life:   sp("extra_life"),
+            question_mark: sp("question_mark"),
+            projectile:   sp("projectile"),
+            teleport:     sp("teleport"),
+            magnet:       sp("magnet"),
+            bear:  [sp("bear_right"), sp("bear_front"), sp("bear_back"), sp("bear_up")],
+            blackbear: [sp("blackbear_right"), sp("blackbear_front"), sp("blackbear_back"), sp("blackbear_up")],
+            butterfly: [sp("butterfly_right"), sp("butterfly_front"), sp("butterfly_back"), sp("butterfly_up")],
+            bird:         sp("bird"),
+            gun:   [sp("gun_right"), sp("gun_down"), sp("gun_left"), sp("gun_up")],
+            tile_empty:       sp("tile_ground"),
+            tile_wall_grey:   sp("tile_wall_grey"),
+            tile_wall_solid:  sp("tile_wall_solid"),
+            tile_wall_red:    sp("tile_wall_a"),
+            tile_wall_green:  sp("tile_wall_b"),
+            tile_wall_black:  sp("tile_wall_c"),
+            tile_ground:      sp("tile_ground"),
+            tile_door_closed: sp("door"),
+            tile_barrier:     sp("tile_barrier"),
+        }
+    }
+
+    /// Image handle for a given element kind + direction.
+    pub fn for_element(&self, kind: &ElementKind, dir: Direction) -> Handle<Image> {
+        let dir_idx = dir_to_idx(dir);
+        match kind {
+            ElementKind::Robbo             => self.robbo.clone(),
+            ElementKind::Screw             => self.screw.clone(),
+            ElementKind::Capsule           => self.capsule.clone(),
+            ElementKind::Bomb              => self.bomb.clone(),
+            ElementKind::Box               => self.bx.clone(),
+            ElementKind::PushBox           => self.push_box.clone(),
+            ElementKind::Key               => self.key.clone(),
+            ElementKind::BulletPickup      => self.bullet_pickup.clone(),
+            ElementKind::ExtraLife         => self.extra_life.clone(),
+            ElementKind::QuestionMark      => self.question_mark.clone(),
+            ElementKind::Projectile { .. } => self.projectile.clone(),
+            ElementKind::Teleport { .. }   => self.teleport.clone(),
+            ElementKind::Magnet { .. }     => self.magnet.clone(),
+            ElementKind::Bear { .. }       => self.bear[dir_idx].clone(),
+            ElementKind::BlackBear { .. }  => self.blackbear[dir_idx].clone(),
+            ElementKind::Butterfly         => self.butterfly[dir_idx].clone(),
+            ElementKind::Bird { .. }       => self.bird.clone(),
+            ElementKind::Gun { direction, .. } => {
+                self.gun[dir_to_idx(*direction)].clone()
+            }
+        }
+    }
+
+    pub fn for_tile(&self, tile: TileKind) -> Option<Handle<Image>> {
+        Some(match tile {
+            TileKind::Empty       => self.tile_empty.clone(),
+            TileKind::WallGrey    => self.tile_wall_grey.clone(),
+            TileKind::WallSolid   => self.tile_wall_solid.clone(),
+            TileKind::WallRed     => self.tile_wall_red.clone(),
+            TileKind::WallGreen   => self.tile_wall_green.clone(),
+            TileKind::WallBlack   => self.tile_wall_black.clone(),
+            TileKind::Ground      => self.tile_ground.clone(),
+            TileKind::DoorClosed | TileKind::DoorOpen => self.tile_door_closed.clone(),
+            TileKind::Barrier     => self.tile_barrier.clone(),
+        })
+    }
+}
+
+/// Direction → index into directional sprite arrays.
+/// Order: right=0, down=1, left=2, up=3  (matches extracted gun/bear sheets)
+pub fn dir_to_idx(dir: Direction) -> usize {
+    match dir {
+        Direction::Right => 0,
+        Direction::Down  => 1,
+        Direction::Left  => 2,
+        Direction::Up    => 3,
+    }
+}
