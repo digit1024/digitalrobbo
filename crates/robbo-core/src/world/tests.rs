@@ -86,7 +86,7 @@ mod tests {
         let h = 4u16;
         let tiles = vec![TileKind::Empty; (w * h) as usize];
         let elements = vec![
-            (Cell::new(0, 1), robbo_at(Cell::new(0, 1))),
+            (Cell::new(1, 1), robbo_at(Cell::new(1, 1))),
             (
                 Cell::new(2, 1),
                 ElementState::new(
@@ -100,6 +100,7 @@ mod tests {
         ];
         let mut world = make_world(w, h, tiles, elements, 0);
         world.ammo = 1;
+        world.turn_robbo(Direction::Right);
         world.step(PlayerInput::Shoot(Direction::Right));
         world.step(PlayerInput::Wait);
         world.step(PlayerInput::Wait);
@@ -112,7 +113,7 @@ mod tests {
         let h = 4u16;
         let tiles = vec![TileKind::Empty; (w * h) as usize];
         let elements = vec![
-            (Cell::new(0, 1), robbo_at(Cell::new(0, 1))),
+            (Cell::new(1, 1), robbo_at(Cell::new(1, 1))),
             (
                 Cell::new(2, 1),
                 ElementState::new(
@@ -134,6 +135,7 @@ mod tests {
         ];
         let mut world = make_world(w, h, tiles, elements, 0);
         world.ammo = 1;
+        world.turn_robbo(Direction::Right);
         world.step(PlayerInput::Shoot(Direction::Right));
         assert!(!world.elements.iter().any(|(_, s)| matches!(
             s.kind,
@@ -311,7 +313,7 @@ mod tests {
             )
         };
         let elements = vec![
-            (Cell::new(0, 2), robbo_at(Cell::new(0, 2))),
+            (Cell::new(1, 2), robbo_at(Cell::new(1, 2))),
             (
                 Cell::new(2, 2),
                 ElementState::new(2, ElementKind::Bomb, Direction::Down),
@@ -323,6 +325,7 @@ mod tests {
         ];
         let mut world = make_world(w, h, tiles, elements, 0);
         world.ammo = 1;
+        world.turn_robbo(Direction::Right);
         world.step(PlayerInput::Shoot(Direction::Right));
         assert!(world.elements.iter().all(|(_, s)| !matches!(s.kind, ElementKind::Bomb)));
         assert!(world
@@ -537,5 +540,182 @@ mod tests {
             .find(|(_, s)| matches!(s.kind, ElementKind::Bear { .. }))
             .map(|(c, _)| *c);
         assert_eq!(bear_cell, Some(Cell::new(1, 0)));
+    }
+
+    #[test]
+    fn laser_gun_beam_extends_over_ticks() {
+        let w = 10u16;
+        let h = 4u16;
+        let tiles = vec![TileKind::Empty; (w * h) as usize];
+        let elements = vec![(
+            Cell::new(2, 1),
+            ElementState::new(
+                2,
+                ElementKind::Gun {
+                    gun_type: GunType::Laser,
+                    direction: Direction::Right,
+                    move_dir: Direction::Right,
+                    movable: false,
+                    rotatable: false,
+                    random_rotate: false,
+                },
+                Direction::Right,
+            ),
+        )];
+        let mut world = make_world(w, h, tiles, elements, 0);
+        let mut events = Vec::new();
+        world.gun_shoot(Cell::new(2, 1), Direction::Right, GunType::Laser, Some(2), &mut events);
+        for _ in 0..8 {
+            world.step(PlayerInput::Wait);
+        }
+        assert!(world
+            .elements
+            .iter()
+            .any(|(c, s)| *c == Cell::new(4, 1) && matches!(s.kind, ElementKind::Laser { solid: true, .. })));
+    }
+
+    #[test]
+    fn gun_shoot_on_ground_places_laser() {
+        let w = 6u16;
+        let h = 4u16;
+        let mut tiles = vec![TileKind::Empty; (w * h) as usize];
+        tiles[9] = TileKind::Ground; // (3, 1)
+        let mut world = make_world(w, h, tiles, vec![], 0);
+        let mut events = Vec::new();
+        world.gun_shoot(Cell::new(2, 1), Direction::Right, GunType::Laser, None, &mut events);
+        assert_eq!(world.tile_at(Cell::new(3, 1)), Some(TileKind::Empty));
+        assert!(world.elements.iter().any(|(c, s)| {
+            *c == Cell::new(3, 1) && matches!(s.kind, ElementKind::Laser { solid: true, .. })
+        }));
+    }
+
+    #[test]
+    fn laser_gun_stops_at_wall() {
+        let w = 8u16;
+        let h = 4u16;
+        let mut tiles = vec![TileKind::Empty; (w * h) as usize];
+        tiles[13] = TileKind::WallSolid; // (5, 1) — index x + y*w = 5 + 8
+        let elements = vec![(
+            Cell::new(2, 1),
+            ElementState::new(
+                2,
+                ElementKind::Gun {
+                    gun_type: GunType::Laser,
+                    direction: Direction::Right,
+                    move_dir: Direction::Right,
+                    movable: false,
+                    rotatable: false,
+                    random_rotate: false,
+                },
+                Direction::Right,
+            ),
+        )];
+        let mut world = make_world(w, h, tiles, elements, 0);
+        let mut events = Vec::new();
+        world.gun_shoot(Cell::new(2, 1), Direction::Right, GunType::Laser, Some(2), &mut events);
+        for _ in 0..8 {
+            world.step(PlayerInput::Wait);
+        }
+        assert!(!world.elements.iter().any(|(c, _)| *c == Cell::new(5, 1)));
+        assert!(world
+            .elements
+            .iter()
+            .any(|(c, s)| *c == Cell::new(4, 1) && matches!(s.kind, ElementKind::Laser { solid: true, .. })));
+    }
+
+    #[test]
+    fn solid_laser_retracts_after_wall_hit() {
+        let w = 8u16;
+        let h = 4u16;
+        let mut tiles = vec![TileKind::Empty; (w * h) as usize];
+        tiles[13] = TileKind::WallSolid; // (5, 1) — index x + y*w = 5 + 8
+        let elements = vec![(
+            Cell::new(2, 1),
+            ElementState::new(
+                2,
+                ElementKind::Gun {
+                    gun_type: GunType::Laser,
+                    direction: Direction::Right,
+                    move_dir: Direction::Right,
+                    movable: false,
+                    rotatable: false,
+                    random_rotate: false,
+                },
+                Direction::Right,
+            ),
+        )];
+        let mut world = make_world(w, h, tiles, elements, 0);
+        let mut events = Vec::new();
+        world.gun_shoot(Cell::new(2, 1), Direction::Right, GunType::Laser, Some(2), &mut events);
+        for _ in 0..8 {
+            world.step(PlayerInput::Wait);
+        }
+        assert!(world
+            .elements
+            .iter()
+            .any(|(c, s)| *c == Cell::new(4, 1) && matches!(s.kind, ElementKind::Laser { solid: true, .. })));
+        for _ in 0..4 {
+            world.step(PlayerInput::Wait);
+        }
+        assert!(!world.elements.iter().any(|(c, s)| {
+            *c == Cell::new(4, 1) && matches!(s.kind, ElementKind::Laser { solid: true, .. })
+        }));
+        assert!(world
+            .elements
+            .iter()
+            .any(|(c, s)| *c == Cell::new(3, 1) && matches!(s.kind, ElementKind::Laser { solid: true, .. })));
+    }
+
+    #[test]
+    fn robbo_shot_spawns_laser_not_projectile() {
+        let w = 6u16;
+        let h = 4u16;
+        let tiles = vec![TileKind::Empty; (w * h) as usize];
+        let elements = vec![(Cell::new(1, 1), robbo_at(Cell::new(1, 1)))];
+        let mut world = make_world(w, h, tiles, elements, 0);
+        world.ammo = 1;
+        world.turn_robbo(Direction::Right);
+        world.step(PlayerInput::Shoot(Direction::Right));
+        assert!(world.elements.iter().any(|(_, s)| matches!(
+            s.kind,
+            ElementKind::Laser { solid: false, .. }
+        )));
+        assert!(!world
+            .elements
+            .iter()
+            .any(|(_, s)| matches!(s.kind, ElementKind::Projectile { .. })));
+    }
+
+    #[test]
+    fn robbo_shot_into_laser_immune_gun() {
+        let w = 6u16;
+        let h = 4u16;
+        let tiles = vec![TileKind::Empty; (w * h) as usize];
+        let elements = vec![
+            (Cell::new(0, 1), robbo_at(Cell::new(0, 1))),
+            (
+                Cell::new(2, 1),
+                ElementState::new(
+                    2,
+                    ElementKind::Gun {
+                        gun_type: GunType::Regular,
+                        direction: Direction::Left,
+                        move_dir: Direction::Left,
+                        movable: false,
+                        rotatable: false,
+                        random_rotate: false,
+                    },
+                    Direction::Left,
+                ),
+            ),
+        ];
+        let mut world = make_world(w, h, tiles, elements, 0);
+        world.ammo = 1;
+        world.turn_robbo(Direction::Right);
+        world.step(PlayerInput::Shoot(Direction::Right));
+        assert_eq!(world.ammo, 0);
+        assert!(world.elements.iter().any(|(c, s)| {
+            *c == Cell::new(2, 1) && matches!(s.kind, ElementKind::Gun { .. })
+        }));
     }
 }

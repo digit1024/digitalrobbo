@@ -1,6 +1,6 @@
 use crate::cell::Cell;
 use crate::direction::Direction;
-use crate::element::{ElementKind, ElementState, GunType};
+use crate::element::{ElementKind, GunType};
 use crate::events::{DeathCause, GameEvent};
 use crate::tile::TileKind;
 use crate::world::World;
@@ -126,50 +126,8 @@ impl World {
         }
     }
 
-    pub(crate) fn tick_projectiles(&mut self, events: &mut Vec<GameEvent>) {
-        enum ProjAction {
-            Move(u32, Cell),
-            Hit(Vec<ProjectileHitAction>),
-            Remove(u32),
-        }
-
-        let mut actions = Vec::new();
-
-        for (cell, state) in self.elements.iter() {
-            let ElementKind::Projectile { direction, from_player } = state.kind else {
-                continue;
-            };
-            let id = state.id;
-            let (dc, dr) = direction.delta();
-            let next = cell.offset(dc, dr);
-            if !self.in_bounds(next) || self.tile_at(next).is_some_and(|t| t.blocks_shot()) {
-                actions.push(ProjAction::Remove(id));
-                continue;
-            }
-            if let Some(hit) = self.resolve_projectile_hit(next, from_player, id) {
-                actions.push(ProjAction::Hit(hit));
-                continue;
-            }
-            actions.push(ProjAction::Move(id, next));
-        }
-
-        for action in actions {
-            match action {
-                ProjAction::Move(id, next) => {
-                    if let Some((i, _)) = self.element_by_id(id) {
-                        let from = self.elements[i].0;
-                        self.elements[i].0 = next;
-                        events.push(GameEvent::Moved {
-                            entity_id: id,
-                            from,
-                            to: next,
-                        });
-                    }
-                }
-                ProjAction::Hit(hit) => self.apply_projectile_hit_actions(&hit, events),
-                ProjAction::Remove(id) => self.remove_element_by_id(id),
-            }
-        }
+    pub(crate) fn tick_projectiles(&mut self, _events: &mut Vec<GameEvent>) {
+        // Player/enemy bolts are ElementKind::Laser; nothing to tick here.
     }
 
     pub(crate) fn tick_push_boxes(&mut self, events: &mut Vec<GameEvent>) {

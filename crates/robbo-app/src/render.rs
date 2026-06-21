@@ -3,7 +3,7 @@ use robbo_core::{Cell, GameEvent, TileKind};
 
 use crate::assets::{SpriteAssets, dir_to_idx, TILE_PX};
 use crate::bridge::{CoreBridge, EntityMap, ReloadVisualsEvent};
-use crate::interpolation::{VisualEntityId, VisualMotion, interpolated_pos};
+use crate::interpolation::{VisualEntityId, VisualMotion, interpolated_pos, visual_step_ticks};
 use crate::projection::ActiveProjection;
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -74,16 +74,26 @@ pub fn sync_visuals(
     mut motion_q: Query<(&VisualEntityId, &mut VisualMotion)>,
     level_roots: Query<Entity, With<LevelRoot>>,
 ) {
-    // Only run when a new tick just fired (events waiting).
-    // advance_interpolation_system handles tween progression every frame.
     if bridge.events_queue.is_empty() {
         return;
+    }
+
+    // Index moves before spawn so new projectiles/lasers start at the correct origin cell.
+    let mut moves: std::collections::HashMap<u32, (Cell, Cell)> = std::collections::HashMap::new();
+    for event in &bridge.events_queue {
+        match event {
+            GameEvent::Moved { entity_id, from, to }
+            | GameEvent::Pushed { entity_id, from, to }
+            | GameEvent::Teleported { entity_id, from, to } => {
+                moves.insert(*entity_id, (*from, *to));
+            }
+            _ => {}
+        }
     }
 
     let current_ids: std::collections::HashSet<u32> =
         bridge.world.elements.iter().map(|(_, s)| s.id).collect();
 
-    // despawn removed elements
     entity_map.0.retain(|id, entity| {
         if current_ids.contains(id) {
             true
@@ -93,14 +103,24 @@ pub fn sync_visuals(
         }
     });
 
-    // spawn new elements that appeared this tick
+    let sim_tick = bridge.world.tick;
     let tile = projection.tile_size();
     let level_root = level_roots.iter().next();
     for (cell, state) in &bridge.world.elements {
         if entity_map.0.contains_key(&state.id) {
             continue;
         }
-        let pos = projection.project(*cell, 1.0);
+        let motion = if let Some((from, to)) = moves.get(&state.id) {
+            VisualMotion::begin_step(
+                *from,
+                *to,
+                sim_tick,
+                visual_step_ticks(&state.kind, state),
+            )
+        } else {
+            VisualMotion::settled(*cell, sim_tick)
+        };
+        let pos = projection.project(motion.from, 1.0);
         let spawn = if let Some(ref sa) = assets {
             commands.spawn((
                 Sprite {
@@ -109,7 +129,7 @@ pub fn sync_visuals(
                     ..default()
                 },
                 Transform::from_translation(pos),
-                VisualMotion { from: *cell, to: *cell, progress: 1.0, duration: crate::bridge::ANIM_SECS },
+                motion,
                 VisualEntityId(state.id),
             ))
         } else {
@@ -120,7 +140,7 @@ pub fn sync_visuals(
                     ..default()
                 },
                 Transform::from_translation(pos),
-                VisualMotion { from: *cell, to: *cell, progress: 1.0, duration: crate::bridge::ANIM_SECS },
+                motion,
                 VisualEntityId(state.id),
             ))
         };
@@ -131,40 +151,54 @@ pub fn sync_visuals(
         entity_map.0.insert(state.id, id);
     }
 
-    // Set motion targets from events, then drain the queue.
-    if !bridge.events_queue.is_empty() {
-        for event in &bridge.events_queue {
-            match event {
-                GameEvent::Exploded { at } | GameEvent::Revealed { at } => {
-                    spawn_explosion_effect(
-                        &mut commands,
-                        &projection,
-                        *at,
-                        level_roots.iter().next(),
-                    );
-                }
-                GameEvent::Moved { entity_id, from, to }
-                | GameEvent::Pushed { entity_id, from, to }
-                | GameEvent::Teleported { entity_id, from, to } => {
-                    if let Some(entity) = entity_map.0.get(entity_id) {
-                        if let Ok((_, mut motion)) = motion_q.get_mut(*entity) {
-                            // Chain from current visual cell when mid-step or already arrived.
-                            motion.from = if motion.from != motion.to && motion.progress < 1.0 {
-                                motion.to
-                            } else {
-                                *from
-                            };
-                            motion.to = *to;
-                            motion.progress = 0.0;
-                            motion.duration = crate::bridge::ANIM_SECS;
-                        }
+    for event in &bridge.events_queue {
+        match event {
+            GameEvent::Exploded { at } | GameEvent::Revealed { at } => {
+                spawn_explosion_effect(
+                    &mut commands,
+                    &projection,
+                    *at,
+                    level_roots.iter().next(),
+                );
+            }
+            GameEvent::Moved { entity_id, from, to }
+            | GameEvent::Pushed { entity_id, from, to }
+            | GameEvent::Teleported { entity_id, from, to } => {
+                if let Some(&entity) = entity_map.0.get(entity_id) {
+                    let step = bridge
+                        .world
+                        .elements
+                        .iter()
+                        .find(|(_, s)| s.id == *entity_id)
+                        .map(|(_, s)| visual_step_ticks(&s.kind, s))
+                        .unwrap_or(1);
+                    if let Ok((_, mut motion)) = motion_q.get_mut(entity) {
+                        motion.retarget(*from, *to, sim_tick, step);
                     }
                 }
-                _ => {}
+            }
+            _ => {}
+        }
+    }
+
+    // Anchor idle entities to their sim cell (bear turns, completed tweens, etc.).
+    for (cell, state) in &bridge.world.elements {
+        if moves.contains_key(&state.id) {
+            continue;
+        }
+        if let Some(entity) = entity_map.0.get(&state.id) {
+            if let Ok((_, mut motion)) = motion_q.get_mut(*entity) {
+                if motion.from == motion.to || motion.progress >= 1.0 {
+                    motion.from = *cell;
+                    motion.to = *cell;
+                    motion.progress = 1.0;
+                    motion.start_tick = sim_tick;
+                }
             }
         }
-        bridge.events_queue.clear();
     }
+
+    bridge.events_queue.clear();
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -194,6 +228,29 @@ pub fn update_robbo_sprite(
     let dir_idx = dir_to_idx(bridge.facing_direction);
     let frame = bridge.walk_frame;
     sprite.image = sa.player[dir_idx][frame].clone();
+}
+
+/// Keep directional sprites in sync with sim state (bears turning, guns rotating, etc.).
+pub fn update_entity_sprites(
+    bridge: Res<CoreBridge>,
+    entity_map: Res<EntityMap>,
+    assets: Option<Res<SpriteAssets>>,
+    mut query: Query<(&VisualEntityId, &mut Sprite)>,
+) {
+    let Some(ref sa) = assets else { return; };
+    let robbo_id = bridge.world.robbo_id;
+    for (_, state) in &bridge.world.elements {
+        if state.id == robbo_id {
+            continue;
+        }
+        let Some(entity) = entity_map.0.get(&state.id) else {
+            continue;
+        };
+        let Ok((_, mut sprite)) = query.get_mut(*entity) else {
+            continue;
+        };
+        sprite.image = sa.for_element(&state.kind, state.direction);
+    }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -301,12 +358,7 @@ pub fn spawn_level_visuals(
                             ..default()
                         },
                         Transform::from_translation(pos),
-                        VisualMotion {
-                            from: *cell,
-                            to: *cell,
-                            progress: 1.0,
-                            duration: crate::bridge::ANIM_SECS,
-                        },
+                        VisualMotion::settled(*cell, world.tick),
                         VisualEntityId(state.id),
                     ))
                     .id()
@@ -319,12 +371,7 @@ pub fn spawn_level_visuals(
                             ..default()
                         },
                         Transform::from_translation(pos),
-                        VisualMotion {
-                            from: *cell,
-                            to: *cell,
-                            progress: 1.0,
-                            duration: crate::bridge::ANIM_SECS,
-                        },
+                        VisualMotion::settled(*cell, world.tick),
                         VisualEntityId(state.id),
                     ))
                     .id()

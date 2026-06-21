@@ -6,6 +6,50 @@ use crate::tile::TileKind;
 use crate::world::World;
 
 impl World {
+    fn place_laser_segment(
+        &mut self,
+        at: Cell,
+        direction: Direction,
+        solid: bool,
+        source_id: Option<u32>,
+    ) {
+        if self.element_at(at).is_some() {
+            return;
+        }
+        let lid = self.allocate_id();
+        self.elements.push((
+            at,
+            ElementState::new(
+                lid,
+                ElementKind::Laser {
+                    direction,
+                    source_id,
+                    solid,
+                    returning: false,
+                },
+                direction,
+            ),
+        ));
+    }
+
+    fn place_blaster_cell(&mut self, at: Cell, direction: Direction) {
+        if self.element_at(at).is_some() {
+            return;
+        }
+        let bid = self.allocate_id();
+        self.elements.push((
+            at,
+            ElementState::new(
+                bid,
+                ElementKind::BlasterCell {
+                    direction,
+                    frame: 0,
+                },
+                direction,
+            ),
+        ));
+    }
+
     /// gnurobbo `shoot_object` — spawn one laser bolt / solid segment, or destroy target.
     pub(crate) fn gun_shoot(
         &mut self,
@@ -30,6 +74,10 @@ impl World {
         }
 
         if let Some((_, el)) = self.element_at(target) {
+            if matches!(el.kind, ElementKind::Laser { .. }) {
+                return;
+            }
+
             if gun_type == GunType::Blaster {
                 if Self::is_blaster_immune(&el.kind) {
                     return;
@@ -39,27 +87,14 @@ impl World {
                     return;
                 }
                 self.destroy_at(target, events);
-                let bid = self.allocate_id();
-                self.elements.push((
-                    target,
-                    ElementState::new(
-                        bid,
-                        ElementKind::BlasterCell {
-                            direction,
-                            frame: 0,
-                        },
-                        direction,
-                    ),
-                ));
+                self.place_blaster_cell(target, direction);
                 return;
             }
 
             if Self::is_laser_shot_immune(&el.kind) {
                 return;
             }
-            if Self::is_laser_destroyable(&el.kind)
-                || self.tile_at(target) == Some(TileKind::Ground)
-            {
+            if Self::is_laser_destroyable(&el.kind) {
                 self.destroy_at(target, events);
                 return;
             }
@@ -68,95 +103,18 @@ impl World {
 
         if self.tile_at(target) == Some(TileKind::Ground) {
             self.set_tile(target, TileKind::Empty);
-            return;
         }
 
         match gun_type {
-            GunType::Blaster => {
-                let bid = self.allocate_id();
-                self.elements.push((
-                    target,
-                    ElementState::new(
-                        bid,
-                        ElementKind::BlasterCell {
-                            direction,
-                            frame: 0,
-                        },
-                        direction,
-                    ),
-                ));
-            }
-            GunType::Laser => {
-                let lid = self.allocate_id();
-                self.elements.push((
-                    target,
-                    ElementState::new(
-                        lid,
-                        ElementKind::Laser {
-                            direction,
-                            source_id,
-                            solid: true,
-                            returning: false,
-                        },
-                        direction,
-                    ),
-                ));
-            }
-            GunType::Regular => {
-                let lid = self.allocate_id();
-                self.elements.push((
-                    target,
-                    ElementState::new(
-                        lid,
-                        ElementKind::Laser {
-                            direction,
-                            source_id,
-                            solid: false,
-                            returning: false,
-                        },
-                        direction,
-                    ),
-                ));
-            }
+            GunType::Blaster => self.place_blaster_cell(target, direction),
+            GunType::Laser => self.place_laser_segment(target, direction, true, source_id),
+            GunType::Regular => self.place_laser_segment(target, direction, false, source_id),
         }
         events.push(GameEvent::Shot { from, direction });
     }
 
-    pub(crate) fn spawn_moving_laser(
-        &mut self,
-        at: Cell,
-        direction: Direction,
-        from_player: bool,
-        events: &mut Vec<GameEvent>,
-    ) {
-        if self.element_at(at).is_some() {
-            return;
-        }
-        let lid = self.allocate_id();
-        self.elements.push((
-            at,
-            ElementState::new(
-                lid,
-                ElementKind::Laser {
-                    direction,
-                    source_id: None,
-                    solid: false,
-                    returning: false,
-                },
-                direction,
-            ),
-        ));
-        if from_player {
-            events.push(GameEvent::Shot {
-                from: at.offset(-direction.delta().0, -direction.delta().1),
-                direction,
-            });
-        }
-    }
-
     pub(crate) fn tick_lasers_and_blasters(&mut self, events: &mut Vec<GameEvent>) {
         if self.tick % 4 != 0 {
-            // Still check robbo contact every tick.
             self.laser_contact_damage(events);
             return;
         }
@@ -205,9 +163,7 @@ impl World {
                 continue;
             }
             if let Some((_, el)) = self.element_at(next) {
-                if Self::is_laser_destroyable(&el.kind)
-                    || self.tile_at(next) == Some(TileKind::Ground)
-                {
+                if Self::is_laser_destroyable(&el.kind) {
                     self.destroy_at(next, events);
                 }
                 self.remove_element_by_id(id);
@@ -257,77 +213,114 @@ impl World {
             self.remove_element_by_id(id);
         }
 
-        // Solid beam extension at returning segments (simplified gnurobbo returnlaser).
-        let solid_ids: Vec<u32> = self
+        let solid: Vec<(u32, Cell, Direction, bool, Option<u32>)> = self
             .elements
             .iter()
-            .filter(|(_, s)| {
-                matches!(
-                    s.kind,
-                    ElementKind::Laser {
-                        solid: true,
-                        ..
-                    }
-                )
-            })
-            .map(|(_, s)| s.id)
-            .collect();
-
-        for id in solid_ids {
-            let Some((i, _)) = self.element_by_id(id) else {
-                continue;
-            };
-            let (cell, direction, returning) = match self.elements[i].1.kind {
-                ElementKind::Laser {
+            .filter_map(|(c, s)| {
+                if let ElementKind::Laser {
                     direction,
                     returning,
+                    source_id,
+                    solid: true,
                     ..
-                } => (self.elements[i].0, direction, returning),
-                _ => continue,
-            };
-            if !returning {
+                } = s.kind
+                {
+                    Some((s.id, *c, direction, returning, source_id))
+                } else {
+                    None
+                }
+            })
+            .collect();
+
+        for (id, cell, direction, returning, _) in &solid {
+            if *returning {
+                self.retract_returning_solid_laser(*id, *cell, *direction);
+            }
+        }
+
+        for (id, cell, direction, was_returning, source_id) in solid {
+            if was_returning || self.solid_laser_returning(id) {
                 continue;
             }
+
             let (dc, dr) = direction.delta();
             let next = cell.offset(dc, dr);
-            if !self.in_bounds(next) || self.is_laser_extend_blocked(next) {
-                if let Some((i, _)) = self.element_by_id(id) {
-                    if let ElementKind::Laser {
-                        ref mut returning, ..
-                    } = self.elements[i].1.kind
-                    {
-                        *returning = false;
-                    }
+
+            if self.robbo_cell() == Some(next) {
+                self.kill_robbo(DeathCause::Projectile, events);
+                continue;
+            }
+
+            if !self.in_bounds(next) || self.tile_at(next).is_some_and(|t| t.blocks_shot()) {
+                self.set_laser_returning(id);
+                continue;
+            }
+
+            if let Some((_, el)) = self.element_at(next) {
+                if matches!(el.kind, ElementKind::Laser { solid: true, .. }) {
+                    continue;
+                }
+                if Self::is_laser_destroyable(&el.kind) {
+                    self.destroy_at(next, events);
+                    continue;
+                }
+                if Self::is_laser_shot_immune(&el.kind) {
+                    self.set_laser_returning(id);
                 }
                 continue;
             }
-            if self.element_at(next).is_none() {
-                let lid = self.allocate_id();
-                let source_id = match self.elements[i].1.kind {
-                    ElementKind::Laser { source_id, .. } => source_id,
-                    _ => None,
-                };
-                self.elements.push((
-                    next,
-                    ElementState::new(
-                        lid,
-                        ElementKind::Laser {
-                            direction,
-                            source_id,
-                            solid: true,
-                            returning: false,
-                        },
-                        direction,
-                    ),
-                ));
+
+            if self.tile_at(next) == Some(TileKind::Ground) {
+                self.set_tile(next, TileKind::Empty);
             }
-            if let Some((i, _)) = self.element_by_id(id) {
-                if let ElementKind::Laser {
-                    ref mut returning, ..
-                } = self.elements[i].1.kind
-                {
-                    *returning = false;
+
+            self.place_laser_segment(next, direction, true, source_id);
+        }
+    }
+
+    /// gnurobbo `returnlaser == 1`: clear this segment and ripple retraction toward the gun.
+    fn retract_returning_solid_laser(&mut self, id: u32, cell: Cell, direction: Direction) {
+        let behind = cell.offset(direction.opposite().delta().0, direction.opposite().delta().1);
+        let behind_kind = self
+            .element_at(behind)
+            .map(|(_, s)| s.kind.clone());
+
+        self.remove_element_by_id(id);
+
+        match behind_kind {
+            Some(ElementKind::Laser {
+                solid: true,
+                direction: behind_dir,
+                ..
+            }) if behind_dir == direction => {
+                if let Some((_, s)) = self.element_at(behind) {
+                    self.set_laser_returning(s.id);
                 }
+            }
+            _ => {}
+        }
+    }
+
+    fn solid_laser_returning(&self, id: u32) -> bool {
+        self.element_by_id(id).is_some_and(|(_, s)| {
+            matches!(
+                s.kind,
+                ElementKind::Laser {
+                    solid: true,
+                    returning: true,
+                    ..
+                }
+            )
+        })
+    }
+
+    fn set_laser_returning(&mut self, id: u32) {
+        if let Some((i, _)) = self.element_by_id(id) {
+            if let ElementKind::Laser {
+                ref mut returning, ..
+            } = self.elements[i].1.kind
+            {
+                *returning = true;
             }
         }
     }
@@ -370,32 +363,10 @@ impl World {
                         self.schedule_bomb_detonation(next);
                     } else {
                         self.destroy_at(next, events);
-                        let bid = self.allocate_id();
-                        self.elements.push((
-                            next,
-                            ElementState::new(
-                                bid,
-                                ElementKind::BlasterCell {
-                                    direction,
-                                    frame: 0,
-                                },
-                                direction,
-                            ),
-                        ));
+                        self.place_blaster_cell(next, direction);
                     }
-                } else if self.element_at(next).is_none() {
-                    let bid = self.allocate_id();
-                    self.elements.push((
-                        next,
-                        ElementState::new(
-                            bid,
-                            ElementKind::BlasterCell {
-                                direction,
-                                frame: 0,
-                            },
-                            direction,
-                        ),
-                    ));
+                } else {
+                    self.place_blaster_cell(next, direction);
                 }
             }
 
@@ -424,16 +395,6 @@ impl World {
         }
     }
 
-    fn is_laser_extend_blocked(&self, cell: Cell) -> bool {
-        if self.tile_at(cell).is_some_and(|t| t.blocks_shot()) {
-            return true;
-        }
-        if let Some((_, el)) = self.element_at(cell) {
-            return !matches!(el.kind, ElementKind::Laser { solid: true, .. });
-        }
-        false
-    }
-
     pub(crate) fn gun_barrel_blocked(&self, gun_cell: Cell, direction: Direction) -> bool {
         let (dc, dr) = direction.delta();
         let next = gun_cell.offset(dc, dr);
@@ -443,32 +404,5 @@ impl World {
                 ElementKind::Laser { .. } | ElementKind::BlasterCell { .. }
             )
         })
-    }
-
-    pub(crate) fn mark_solid_laser_return(&mut self, gun_cell: Cell, direction: Direction) {
-        let (dc, dr) = direction.delta();
-        let mut cell = gun_cell.offset(dc, dr);
-        while self.in_bounds(cell) {
-            if let Some((i, _)) = self
-                .elements
-                .iter()
-                .enumerate()
-                .find(|(_, (c, _))| *c == cell)
-            {
-                if let ElementKind::Laser {
-                    solid: true,
-                    ref mut returning,
-                    ..
-                } = self.elements[i].1.kind
-                {
-                    *returning = true;
-                    return;
-                }
-            }
-            if self.is_laser_extend_blocked(cell) {
-                return;
-            }
-            cell = cell.offset(dc, dr);
-        }
     }
 }

@@ -108,6 +108,9 @@ impl World {
             }
         }
         for (_, state) in &world.elements {
+            world.next_entity_id = world.next_entity_id.max(state.id.saturating_add(1));
+        }
+        for (_, state) in &world.elements {
             if matches!(state.kind, ElementKind::Robbo) {
                 world.robbo_id = state.id;
             }
@@ -429,10 +432,6 @@ impl World {
                 _ => {}
             }
         }
-    }
-
-    pub(crate) fn is_laser_immune(kind: &ElementKind) -> bool {
-        Self::is_laser_shot_immune(kind)
     }
 
     /// Objects that block `shoot_object` from placing a new laser segment.

@@ -1,6 +1,6 @@
 use crate::cell::Cell;
 use crate::direction::Direction;
-use crate::element::{ElementKind, GunType, next_rand, roll_one_in_eight};
+use crate::element::{ElementKind, next_rand, roll_one_in_eight};
 use crate::events::GameEvent;
 use crate::world::World;
 
@@ -94,11 +94,7 @@ impl World {
                 })
                 .unwrap_or(direction);
 
-            let before = self.elements.len();
             self.gun_shoot(from, shoot_dir, gun_type, Some(id), events);
-            if gun_type == GunType::Laser && self.elements.len() == before {
-                self.mark_solid_laser_return(from, shoot_dir);
-            }
         }
     }
 

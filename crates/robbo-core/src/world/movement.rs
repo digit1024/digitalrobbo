@@ -1,6 +1,6 @@
 use crate::cell::Cell;
 use crate::direction::Direction;
-use crate::element::{ElementKind, ElementState};
+use crate::element::{ElementKind, GunType};
 use crate::events::{DeathCause, GameEvent};
 use crate::tile::TileKind;
 use crate::world::{World, MAX_TELEPORT_INDEX};
@@ -281,24 +281,14 @@ impl World {
         }
 
         self.ammo -= 1;
-        events.push(GameEvent::Shot { from, direction: dir });
 
         let proj_id = self.allocate_id();
         if let Some(hit) = self.resolve_projectile_hit(spawn, true, proj_id) {
+            events.push(GameEvent::Shot { from, direction: dir });
             self.apply_projectile_hit_actions(&hit, events);
             return;
         }
 
-        self.elements.push((
-            spawn,
-            ElementState::new(
-                proj_id,
-                ElementKind::Projectile {
-                    direction: dir,
-                    from_player: true,
-                },
-                dir,
-            ),
-        ));
+        self.gun_shoot(from, dir, GunType::Regular, None, events);
     }
 }

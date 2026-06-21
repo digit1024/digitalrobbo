@@ -1,34 +1,107 @@
 use bevy::prelude::*;
-use robbo_core::Cell;
+use robbo_core::{Cell, ElementKind, ElementState};
 
-use crate::bridge::TICK_SECS;
+use crate::bridge::{CoreBridge, GameTickTimer, TICK_SECS};
 use crate::projection::ActiveProjection;
 
 #[derive(Component)]
 pub struct VisualEntityId(pub u32);
 
-#[derive(Component, Default)]
+#[derive(Component, Clone, Copy)]
 pub struct VisualMotion {
     pub from: Cell,
     pub to: Cell,
     pub progress: f32,
-    /// Wall-clock length of one grid step — equals one sim tick.
-    pub duration: f32,
+    /// Sim tick when this step began (`world.tick` at the `Moved` event).
+    pub start_tick: u64,
+    /// How many sim ticks this A→B glide spans (matches time until the next sim move).
+    pub step_ticks: u32,
 }
 
-/// Advance each entity's step tween independently (Robbo, enemies, bullets, boxes).
-/// Progress only resets when `sync_visuals` assigns a new move — not on every sim tick.
+impl Default for VisualMotion {
+    fn default() -> Self {
+        Self {
+            from: Cell::new(0, 0),
+            to: Cell::new(0, 0),
+            progress: 1.0,
+            start_tick: 0,
+            step_ticks: 1,
+        }
+    }
+}
+
+impl VisualMotion {
+    pub fn settled(cell: Cell, tick: u64) -> Self {
+        Self {
+            from: cell,
+            to: cell,
+            progress: 1.0,
+            start_tick: tick,
+            step_ticks: 1,
+        }
+    }
+
+    pub fn begin_step(from: Cell, to: Cell, start_tick: u64, step_ticks: u32) -> Self {
+        Self {
+            from,
+            to,
+            progress: 0.0,
+            start_tick,
+            step_ticks: step_ticks.max(1),
+        }
+    }
+
+    pub fn retarget(&mut self, from: Cell, to: Cell, start_tick: u64, step_ticks: u32) {
+        self.from = if self.from != self.to && self.progress < 1.0 {
+            self.to
+        } else {
+            from
+        };
+        self.to = to;
+        self.start_tick = start_tick;
+        self.step_ticks = step_ticks.max(1);
+        self.progress = 0.0;
+    }
+}
+
+/// Sim ticks between moves for each element — must mirror robbo-core cadence.
+pub fn visual_step_ticks(kind: &ElementKind, state: &ElementState) -> u32 {
+    match kind {
+        ElementKind::Bear { .. } => 4,
+        ElementKind::BlackBear { .. } => 2,
+        ElementKind::Bird { .. } => 3,
+        ElementKind::Butterfly => 2,
+        ElementKind::PushBox if state.sliding => 4,
+        ElementKind::Gun { movable: true, .. } => 8,
+        // Gun regular/laser bolts (`place_laser_segment` solid:false) — `tick_lasers_and_blasters` every 4 ticks.
+        ElementKind::Laser { solid: false, .. } => 4,
+        // Robbo / bird / push-box shots use `Projectile` + `tick_projectiles` every tick.
+        ElementKind::Projectile { .. } => 1,
+        _ => 1,
+    }
+}
+
+/// Fraction elapsed through the current sim tick (0 at tick start, →1 just before next tick).
+pub fn tick_phase(tick_timer: &GameTickTimer) -> f32 {
+    if TICK_SECS <= 0.0 {
+        return 1.0;
+    }
+    (1.0 - tick_timer.0.remaining_secs() / TICK_SECS).clamp(0.0, 1.0)
+}
+
+/// Linear progress locked to the sim tick clock — same for Robbo, bears, bullets, lasers, guns.
 pub fn advance_interpolation_system(
-    time: Res<Time>,
+    bridge: Res<CoreBridge>,
+    tick_timer: Res<GameTickTimer>,
     mut query: Query<&mut VisualMotion, With<VisualEntityId>>,
 ) {
-    let dt = time.delta_secs();
+    let tick_now = bridge.world.tick as f32 + tick_phase(&tick_timer);
     for mut motion in &mut query {
         if motion.from == motion.to {
             continue;
         }
-        let duration = motion.duration.max(TICK_SECS);
-        motion.progress = (motion.progress + dt / duration).min(1.0);
+        let elapsed = tick_now - motion.start_tick as f32;
+        motion.progress = (elapsed / motion.step_ticks as f32).min(1.0);
         if motion.progress >= 1.0 {
             motion.from = motion.to;
             motion.progress = 1.0;
@@ -36,12 +109,8 @@ pub fn advance_interpolation_system(
     }
 }
 
-pub fn eased(t: f32) -> f32 {
-    t * t * (3.0 - 2.0 * t)
-}
-
 pub fn interpolated_pos(motion: &VisualMotion, projection: &ActiveProjection, layer: f32) -> Vec3 {
-    let t = eased(motion.progress);
+    let t = motion.progress.clamp(0.0, 1.0);
     let from = projection.project(motion.from, layer);
     let to = projection.project(motion.to, layer);
     from.lerp(to, t)

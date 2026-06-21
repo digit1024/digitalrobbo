@@ -186,6 +186,7 @@ fn configure_app(app: &mut App, allow_any_thread: bool) {
             Update,
             (
                 render::update_robbo_sprite,
+                render::update_entity_sprites,
                 render::update_explosion_effects,
             )
                 .after(render::sync_visuals)
