@@ -349,4 +349,73 @@ mod tests {
         w2.step(PlayerInput::Move(Direction::Up));
         assert_eq!(w1.state_hash(), w2.state_hash());
     }
+
+    #[test]
+    fn turn_robbo_updates_facing_without_move() {
+        let w = 5u16;
+        let h = 4u16;
+        let tiles = vec![TileKind::Empty; (w * h) as usize];
+        let elements = vec![(Cell::new(2, 2), robbo_at(Cell::new(2, 2)))];
+        let mut world = make_world(w, h, tiles, elements, 0);
+        world.turn_robbo(Direction::Left);
+        assert_eq!(world.robbo_cell(), Some(Cell::new(2, 2)));
+        let robbo = world
+            .elements
+            .iter()
+            .find(|(_, s)| matches!(s.kind, ElementKind::Robbo))
+            .unwrap();
+        assert_eq!(robbo.1.direction, Direction::Left);
+    }
+
+    #[test]
+    fn adjacent_shot_explodes_bomb_same_tick() {
+        let w = 5u16;
+        let h = 3u16;
+        let tiles = vec![TileKind::Empty; (w * h) as usize];
+        let elements = vec![
+            (Cell::new(1, 1), robbo_at(Cell::new(1, 1))),
+            (
+                Cell::new(2, 1),
+                ElementState::new(2, ElementKind::Bomb, Direction::Down),
+            ),
+        ];
+        let mut world = make_world(w, h, tiles, elements, 0);
+        world.ammo = 1;
+        world.turn_robbo(Direction::Right);
+        world.step(PlayerInput::Shoot(Direction::Right));
+        assert_eq!(world.ammo, 0);
+        assert!(!world
+            .elements
+            .iter()
+            .any(|(_, s)| matches!(s.kind, ElementKind::Bomb)));
+    }
+
+    #[test]
+    fn adjacent_shot_destroys_ground_same_tick() {
+        let w = 5u16;
+        let h = 3u16;
+        let mut tiles = vec![TileKind::Empty; (w * h) as usize];
+        tiles[7] = TileKind::Ground;
+        let elements = vec![(Cell::new(1, 1), robbo_at(Cell::new(1, 1)))];
+        let mut world = make_world(w, h, tiles, elements, 0);
+        world.ammo = 1;
+        world.turn_robbo(Direction::Right);
+        world.step(PlayerInput::Shoot(Direction::Right));
+        assert_eq!(world.ammo, 0);
+        assert_eq!(world.tile_at(Cell::new(2, 1)), Some(TileKind::Empty));
+    }
+
+    #[test]
+    fn adjacent_shot_into_solid_wall_no_ammo_spent() {
+        let w = 5u16;
+        let h = 3u16;
+        let mut tiles = vec![TileKind::Empty; (w * h) as usize];
+        tiles[7] = TileKind::WallSolid;
+        let elements = vec![(Cell::new(1, 1), robbo_at(Cell::new(1, 1)))];
+        let mut world = make_world(w, h, tiles, elements, 0);
+        world.ammo = 1;
+        world.turn_robbo(Direction::Right);
+        world.step(PlayerInput::Shoot(Direction::Right));
+        assert_eq!(world.ammo, 1);
+    }
 }

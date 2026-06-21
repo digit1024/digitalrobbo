@@ -15,6 +15,38 @@ pub struct InputCooldown {
     pub frames_remaining: u8,
 }
 
+/// Queued key events for integration tests (applied in PreUpdate after winit).
+#[derive(Resource, Default)]
+pub struct TestInputInject {
+    pub press: Vec<KeyCode>,
+    pub release: Vec<KeyCode>,
+    pub clear: bool,
+}
+
+pub fn apply_test_input(mut keys: ResMut<ButtonInput<KeyCode>>, mut inject: ResMut<TestInputInject>) {
+    if inject.clear {
+        keys.clear();
+        inject.clear = false;
+    }
+    for key in inject.release.drain(..) {
+        keys.release(key);
+    }
+    for key in inject.press.drain(..) {
+        keys.press(key);
+    }
+}
+
+/// Latched player steering — consumed on sim tick boundaries only.
+#[derive(Resource, Default, Clone)]
+pub struct SteeringState {
+    /// Direction key held after the initial press frame.
+    pub hold: Option<Direction>,
+    /// One-step move from tap-same-direction (consumed on next tick).
+    pub tap_move: Option<Direction>,
+    /// Shoot on next tick.
+    pub shoot_pending: bool,
+}
+
 pub fn tick_input_cooldown(mut cooldown: ResMut<InputCooldown>) {
     if cooldown.frames_remaining > 0 {
         cooldown.frames_remaining -= 1;
@@ -47,9 +79,105 @@ fn resolve_last_level(
     selection.level_index = 0;
 }
 
+struct DirKeys {
+    up: KeyCode,
+    down: KeyCode,
+    left: KeyCode,
+    right: KeyCode,
+}
+
+const DIR_KEYS: DirKeys = DirKeys {
+    up: KeyCode::ArrowUp,
+    down: KeyCode::ArrowDown,
+    left: KeyCode::ArrowLeft,
+    right: KeyCode::ArrowRight,
+};
+
+const WASD: DirKeys = DirKeys {
+    up: KeyCode::KeyW,
+    down: KeyCode::KeyS,
+    left: KeyCode::KeyA,
+    right: KeyCode::KeyD,
+};
+
+fn keys_for_dir(dir: Direction) -> [KeyCode; 2] {
+    match dir {
+        Direction::Up => [DIR_KEYS.up, WASD.up],
+        Direction::Down => [DIR_KEYS.down, WASD.down],
+        Direction::Left => [DIR_KEYS.left, WASD.left],
+        Direction::Right => [DIR_KEYS.right, WASD.right],
+    }
+}
+
+fn just_pressed_dir(keys: &ButtonInput<KeyCode>, dir: Direction) -> bool {
+    let [a, b] = keys_for_dir(dir);
+    keys.just_pressed(a) || keys.just_pressed(b)
+}
+
+fn pressed_dir(keys: &ButtonInput<KeyCode>, dir: Direction) -> bool {
+    let [a, b] = keys_for_dir(dir);
+    keys.pressed(a) || keys.pressed(b)
+}
+
+fn just_released_dir(keys: &ButtonInput<KeyCode>, dir: Direction) -> bool {
+    let [a, b] = keys_for_dir(dir);
+    keys.just_released(a) || keys.just_released(b)
+}
+
+fn turn_robbo(bridge: &mut CoreBridge, dir: Direction) {
+    bridge.world.turn_robbo(dir);
+    bridge.facing_direction = dir;
+    bridge.last_direction = dir;
+}
+
+fn update_steering(keys: &ButtonInput<KeyCode>, bridge: &mut CoreBridge, steering: &mut SteeringState) {
+    for dir in [
+        Direction::Up,
+        Direction::Down,
+        Direction::Left,
+        Direction::Right,
+    ] {
+        if just_released_dir(keys, dir) {
+            if steering.hold == Some(dir) {
+                steering.hold = None;
+            }
+            if steering.tap_move == Some(dir) {
+                steering.tap_move = None;
+            }
+        }
+    }
+
+    for dir in [
+        Direction::Up,
+        Direction::Down,
+        Direction::Left,
+        Direction::Right,
+    ] {
+        if just_pressed_dir(keys, dir) {
+            if dir == bridge.facing_direction {
+                steering.tap_move = Some(dir);
+            } else {
+                turn_robbo(bridge, dir);
+            }
+        }
+    }
+
+    for dir in [
+        Direction::Up,
+        Direction::Down,
+        Direction::Left,
+        Direction::Right,
+    ] {
+        if pressed_dir(keys, dir) && !just_pressed_dir(keys, dir) {
+            steering.hold = Some(dir);
+        }
+    }
+}
+
 pub fn keyboard_input(
     keys: Res<ButtonInput<KeyCode>>,
     mut bridge: ResMut<CoreBridge>,
+    mut steering: ResMut<SteeringState>,
     state: Res<State<AppState>>,
     mut next: ResMut<NextState<AppState>>,
     mut selection: ResMut<LevelSelection>,
@@ -135,42 +263,10 @@ pub fn keyboard_input(
                 return;
             }
 
-            // Instant visual facing on the very first frame of a keypress —
-            // happens before the tick fires so Robbo turns immediately.
-            if keys.just_pressed(KeyCode::ArrowUp) || keys.just_pressed(KeyCode::KeyW) {
-                bridge.facing_direction = Direction::Up;
-            } else if keys.just_pressed(KeyCode::ArrowDown) || keys.just_pressed(KeyCode::KeyS) {
-                bridge.facing_direction = Direction::Down;
-            } else if keys.just_pressed(KeyCode::ArrowLeft) || keys.just_pressed(KeyCode::KeyA) {
-                bridge.facing_direction = Direction::Left;
-            } else if keys.just_pressed(KeyCode::ArrowRight) || keys.just_pressed(KeyCode::KeyD) {
-                bridge.facing_direction = Direction::Right;
-            }
-
-            let held_dir = if keys.pressed(KeyCode::ArrowUp) || keys.pressed(KeyCode::KeyW) {
-                Some(Direction::Up)
-            } else if keys.pressed(KeyCode::ArrowDown) || keys.pressed(KeyCode::KeyS) {
-                Some(Direction::Down)
-            } else if keys.pressed(KeyCode::ArrowLeft) || keys.pressed(KeyCode::KeyA) {
-                Some(Direction::Left)
-            } else if keys.pressed(KeyCode::ArrowRight) || keys.pressed(KeyCode::KeyD) {
-                Some(Direction::Right)
-            } else {
-                None
-            };
-
-            if let Some(dir) = held_dir {
-                bridge.pending_input = Some(robbo_core::PlayerInput::Move(dir));
-                return;
-            }
-
-            if bridge.animating {
-                return;
-            }
+            update_steering(&keys, &mut bridge, &mut steering);
 
             if keys.just_pressed(KeyCode::Space) {
-                bridge.pending_input =
-                    Some(robbo_core::PlayerInput::Shoot(bridge.last_direction));
+                steering.shoot_pending = true;
             } else if keys.just_pressed(KeyCode::KeyZ) {
                 let current = bridge.world.clone();
                 if let Some(prev) = bridge.history.undo(current) {

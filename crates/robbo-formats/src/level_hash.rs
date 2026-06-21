@@ -102,10 +102,14 @@ fn hash_element_kind(h: &mut sha2::Sha256, kind: &ElementKind) {
         ElementKind::Laser {
             direction,
             source_id,
+            solid,
+            returning,
         } => h.update([
             18,
             direction_byte(*direction),
             source_id.map(|id| id as u8).unwrap_or(255),
+            u8::from(*solid),
+            u8::from(*returning),
         ]),
         ElementKind::BlasterCell { direction, frame } => {
             h.update([19, direction_byte(*direction), *frame]);

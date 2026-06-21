@@ -58,10 +58,14 @@ pub fn char_to_element(c: char) -> FormatResult<Option<(ElementKind, Direction)>
         'L' => ElementKind::Laser {
             direction: Direction::Right,
             source_id: None,
+            solid: true,
+            returning: false,
         },
         'l' => ElementKind::Laser {
             direction: Direction::Down,
             source_id: None,
+            solid: true,
+            returning: false,
         },
         _ => return Ok(None),
     };
@@ -146,6 +150,8 @@ pub fn apply_additional_line(elements: &mut [(Cell, ElementState)], line: &str) 
             elements[idx].1.kind = ElementKind::Laser {
                 direction: dir,
                 source_id: None,
+                solid: true,
+                returning: false,
             };
             elements[idx].1.direction = dir;
         }

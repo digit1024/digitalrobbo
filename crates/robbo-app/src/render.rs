@@ -74,9 +74,8 @@ pub fn sync_visuals(
     mut motion_q: Query<(&VisualEntityId, &mut VisualMotion)>,
     level_roots: Query<Entity, With<LevelRoot>>,
 ) {
-    // Only run when a new tick just fired (events waiting) — NOT every frame
-    // while animating.  advance_interpolation_system handles the tween
-    // progression; we only need sync_visuals once per world step.
+    // Only run when a new tick just fired (events waiting).
+    // advance_interpolation_system handles tween progression every frame.
     if bridge.events_queue.is_empty() {
         return;
     }
@@ -132,10 +131,7 @@ pub fn sync_visuals(
         entity_map.0.insert(state.id, id);
     }
 
-    // Set motion targets from events — only if there are events to process.
-    // After this, drain the queue so we never reset progress=0 on the next frame.
-    // bridge.animating stays true; advance_interpolation watches that to know
-    // the tween is still running.
+    // Set motion targets from events, then drain the queue.
     if !bridge.events_queue.is_empty() {
         for event in &bridge.events_queue {
             match event {
@@ -152,7 +148,11 @@ pub fn sync_visuals(
                 | GameEvent::Teleported { entity_id, from, to } => {
                     if let Some(entity) = entity_map.0.get(entity_id) {
                         if let Ok((_, mut motion)) = motion_q.get_mut(*entity) {
-                            motion.from = *from;
+                            if motion.progress > 0.0 && motion.progress < 1.0 {
+                                motion.from = motion.to;
+                            } else {
+                                motion.from = *from;
+                            }
                             motion.to = *to;
                             motion.progress = 0.0;
                         }
@@ -161,8 +161,6 @@ pub fn sync_visuals(
                 _ => {}
             }
         }
-        // Drain events now — advance_interpolation uses bridge.animating,
-        // not events_queue, to decide when the tween is complete.
         bridge.events_queue.clear();
     }
 }

@@ -39,6 +39,7 @@ pub struct World {
     pub status: LevelStatus,
     pub rng_state: u64,
     pub sensible_questionmarks: bool,
+    pub sensible_bears: bool,
     pub robbo_magnet_locked: bool,
     pub magnet_pull_dir: Direction,
     pub barrier_directions: HashMap<Cell, Direction>,
@@ -73,6 +74,7 @@ impl World {
             status: LevelStatus::Playing,
             rng_state: 1,
             sensible_questionmarks: true,
+            sensible_bears: true,
             robbo_magnet_locked: false,
             magnet_pull_dir: Direction::Down,
             barrier_directions: HashMap::new(),
@@ -430,6 +432,11 @@ impl World {
     }
 
     pub(crate) fn is_laser_immune(kind: &ElementKind) -> bool {
+        Self::is_laser_shot_immune(kind)
+    }
+
+    /// Objects that block `shoot_object` from placing a new laser segment.
+    pub(crate) fn is_laser_shot_immune(kind: &ElementKind) -> bool {
         matches!(
             kind,
             ElementKind::Box
@@ -441,12 +448,44 @@ impl World {
                 | ElementKind::Teleport { .. }
                 | ElementKind::Gun { .. }
                 | ElementKind::Laser { .. }
+                | ElementKind::BlasterCell { .. }
+                | ElementKind::BarbedWire
+                | ElementKind::Stop
+        )
+    }
+
+    /// Objects destroyed by laser bolt / gun shot (gnurobbo `destroyable`).
+    pub(crate) fn is_laser_destroyable(kind: &ElementKind) -> bool {
+        matches!(
+            kind,
+            ElementKind::Box
+                | ElementKind::PushBox
+                | ElementKind::Bomb
+                | ElementKind::QuestionMark { .. }
+                | ElementKind::Bear { .. }
+                | ElementKind::BlackBear { .. }
+                | ElementKind::Bird { .. }
+                | ElementKind::Butterfly
                 | ElementKind::BarbedWire
                 | ElementKind::Stop
         )
     }
 
     pub(crate) fn is_blaster_immune(kind: &ElementKind) -> bool {
-        Self::is_laser_immune(kind)
+        matches!(
+            kind,
+            ElementKind::Box
+                | ElementKind::PushBox
+                | ElementKind::Screw
+                | ElementKind::Key
+                | ElementKind::Capsule
+                | ElementKind::Magnet { .. }
+                | ElementKind::Teleport { .. }
+                | ElementKind::Gun { .. }
+                | ElementKind::Laser { .. }
+                | ElementKind::BlasterCell { .. }
+                | ElementKind::BarbedWire
+                | ElementKind::Stop
+        )
     }
 }

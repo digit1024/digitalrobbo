@@ -48,11 +48,13 @@ impl World {
                 _ => continue,
             };
 
-            if rotatable && tick_counter % 20 == 0 {
+            let barrel_blocked = self.gun_barrel_blocked(gun_cell, direction);
+
+            if rotatable && !barrel_blocked && tick_counter % 20 == 0 {
                 let new_dir = if random_rotate {
                     Self::random_dir(&mut self.rng_state)
                 } else {
-                    Self::rotate_dir(direction)
+                    direction.turn_right()
                 };
                 if let Some((i, _)) = self.element_by_id(id) {
                     if let ElementKind::Gun {
@@ -65,7 +67,7 @@ impl World {
                 }
             }
 
-            if movable && tick_counter % 8 == 0 {
+            if movable && !barrel_blocked && tick_counter % 8 == 0 {
                 self.try_move_gun(id, gun_cell, move_dir, events);
             }
 
@@ -92,15 +94,21 @@ impl World {
                 })
                 .unwrap_or(direction);
 
-            match gun_type {
-                GunType::Regular => self.shoot_from_cell(from, shoot_dir, events),
-                GunType::Laser => self.fire_laser(from, shoot_dir, Some(id), events),
-                GunType::Blaster => self.fire_blaster(from, shoot_dir, events),
+            let before = self.elements.len();
+            self.gun_shoot(from, shoot_dir, gun_type, Some(id), events);
+            if gun_type == GunType::Laser && self.elements.len() == before {
+                self.mark_solid_laser_return(from, shoot_dir);
             }
         }
     }
 
-    fn try_move_gun(&mut self, id: u32, cell: Cell, move_dir: Direction, events: &mut Vec<GameEvent>) {
+    fn try_move_gun(
+        &mut self,
+        id: u32,
+        cell: Cell,
+        move_dir: Direction,
+        events: &mut Vec<GameEvent>,
+    ) {
         let (dc, dr) = move_dir.delta();
         let next = cell.offset(dc, dr);
         let blocked = !self.in_bounds(next)
@@ -136,9 +144,5 @@ impl World {
             2 => Direction::Left,
             _ => Direction::Up,
         }
-    }
-
-    fn rotate_dir(dir: Direction) -> Direction {
-        dir.turn_right()
     }
 }

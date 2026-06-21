@@ -29,7 +29,7 @@ use bevy::log::LogPlugin;
 use bevy::prelude::*;
 use bevy::winit::{WakeUp, WinitPlugin};
 use bridge::{CoreBridge, EntityMap, GameSession, GameTickTimer, LoadLevelEvent, ReloadVisualsEvent};
-use input::InputCooldown;
+use input::{apply_test_input, InputCooldown, SteeringState, TestInputInject};
 use intro::{setup_intro, spawn_intro, start_intro_audio};
 use levels::{LevelRegistry, LevelSelection};
 use menu::{
@@ -91,6 +91,8 @@ fn configure_app(app: &mut App, allow_any_thread: bool) {
         .insert_resource(LevelCountdown::default())
         .insert_resource(MenuSelection::default())
         .insert_resource(InputCooldown::default())
+        .insert_resource(SteeringState::default())
+        .insert_resource(TestInputInject::default())
         .insert_resource(editor::EditorState::default())
         .add_event::<bridge::CoreGameEvent>()
         .add_event::<LoadLevelEvent>()
@@ -108,11 +110,10 @@ fn configure_app(app: &mut App, allow_any_thread: bool) {
         .add_systems(
             Update,
             (
+                apply_test_input,
                 input::keyboard_input,
                 input::tick_input_cooldown,
-                bridge::buffer_input_while_animating,
                 bridge::game_tick_system,
-                bridge::release_queued_input,
                 render::sync_visuals,
                 interpolation::advance_interpolation_system,
                 ui::load_level_system,

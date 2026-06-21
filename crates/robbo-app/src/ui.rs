@@ -4,6 +4,7 @@ use robbo_core::GameEvent;
 use crate::app_state::AppState;
 use crate::audio::{play_countdown_tick, GameAudio};
 use crate::bridge::{CoreBridge, CoreGameEvent, GameSession, LoadLevelEvent, ReloadVisualsEvent};
+use crate::input::SteeringState;
 use crate::levels::{LevelRegistry, LevelSelection};
 use crate::persistence::{GameSave, LevelProgress, persist_save};
 
@@ -52,6 +53,7 @@ pub fn load_level_system(
     mut commands: Commands,
     mut events: EventReader<LoadLevelEvent>,
     mut bridge: ResMut<CoreBridge>,
+    mut steering: ResMut<SteeringState>,
     mut session: ResMut<GameSession>,
     mut timer: ResMut<SpeedrunTimer>,
     mut countdown: ResMut<LevelCountdown>,
@@ -75,9 +77,7 @@ pub fn load_level_system(
         bridge.world = level.to_world();
         bridge.history.clear();
         bridge.events_queue.clear();
-        bridge.animating = false;
-        bridge.pending_input = None;
-        bridge.queued_input = None;
+        *steering = SteeringState::default();
 
         session.pack_name = pack.name.clone();
         session.level_index = selection.level_index;

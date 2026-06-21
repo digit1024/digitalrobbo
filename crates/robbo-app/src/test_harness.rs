@@ -8,11 +8,11 @@ use std::path::{Path, PathBuf};
 use bevy::app::AppExit;
 use bevy::prelude::*;
 use bevy::render::view::screenshot::{save_to_disk, Screenshot};
-use robbo_core::Cell;
+use robbo_core::{Cell, Direction};
 
 use crate::app_state::AppState;
-use crate::bridge::{CoreBridge, LoadLevelEvent};
-use crate::input::InputCooldown;
+use crate::bridge::{CoreBridge, LoadLevelEvent, TICK_SECS};
+use crate::input::{InputCooldown, SteeringState, TestInputInject};
 use crate::levels::LevelSelection;
 
 pub struct GameTestHarness {
@@ -63,22 +63,59 @@ impl GameTestHarness {
         self.app.world().resource::<CoreBridge>().world.robbo_cell()
     }
 
-    pub fn is_animating(&self) -> bool {
-        self.app.world().resource::<CoreBridge>().animating
+    pub fn facing(&self) -> Direction {
+        self.app.world().resource::<CoreBridge>().facing_direction
+    }
+
+    pub fn sim_tick(&self) -> u64 {
+        self.app.world().resource::<CoreBridge>().world.tick
+    }
+
+    pub fn ammo(&self) -> u32 {
+        self.app.world().resource::<CoreBridge>().world.ammo
+    }
+
+    pub fn steering(&self) -> SteeringState {
+        self.app.world().resource::<SteeringState>().clone()
     }
 
     pub fn press_key(&mut self, key: KeyCode) {
         self.app
             .world_mut()
-            .resource_mut::<ButtonInput<KeyCode>>()
-            .press(key);
+            .resource_mut::<TestInputInject>()
+            .press
+            .push(key);
+    }
+
+    pub fn release_key(&mut self, key: KeyCode) {
+        self.app
+            .world_mut()
+            .resource_mut::<TestInputInject>()
+            .release
+            .push(key);
     }
 
     pub fn release_all_keys(&mut self) {
         self.app
             .world_mut()
-            .resource_mut::<ButtonInput<KeyCode>>()
-            .clear();
+            .resource_mut::<TestInputInject>()
+            .clear = true;
+    }
+
+    /// Frames per sim tick at ~60 FPS (TICK_SECS = 0.14).
+    pub fn frames_per_sim_tick() -> usize {
+        (TICK_SECS / (1.0 / 60.0)).ceil() as usize + 2
+    }
+
+    /// Advance until at least one sim tick has fired.
+    pub fn wait_sim_ticks(&mut self, ticks: usize) {
+        let target = self.sim_tick() + ticks as u64;
+        for _ in 0..ticks * Self::frames_per_sim_tick() + 30 {
+            if self.sim_tick() >= target {
+                return;
+            }
+            self.tick(1);
+        }
     }
 
     /// Simulate one tile move: hold `key` until Robbo's cell changes or we time out.
@@ -88,7 +125,7 @@ impl GameTestHarness {
         let mut moved = false;
         for _ in 0..max_frames {
             self.tick(1);
-            if !self.is_animating() && self.robbo_cell() != before {
+            if self.robbo_cell() != before {
                 moved = true;
                 break;
             }
@@ -212,7 +249,7 @@ fn smoke_scenario_system(
                 .spawn(Screenshot::primary_window())
                 .observe(save_to_disk(path));
             scenario.step = SmokeStep::Move;
-            scenario.wait_frames = 45;
+            scenario.wait_frames = 90;
         }
         SmokeStep::Move => {
             keys.press(KeyCode::ArrowRight);

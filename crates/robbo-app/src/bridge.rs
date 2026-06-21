@@ -4,10 +4,11 @@ use bevy::prelude::*;
 use robbo_core::{Direction, GameEvent, PlayerInput};
 
 use crate::app_state::AppState;
+use crate::input::SteeringState;
 use crate::ui::LevelCountdown;
 
-pub const TICK_SECS: f32 = 0.14;  // ~7 ticks/s — enemies/guns advance at this rate
-pub const ANIM_SECS: f32 = 0.10;  // visual tween duration (must be < TICK_SECS)
+pub const TICK_SECS: f32 = 0.14; // ~7 ticks/s — enemies/guns advance at this rate
+pub const ANIM_SECS: f32 = 0.10; // visual tween duration (must be < TICK_SECS)
 
 #[derive(Event, Clone, Debug)]
 pub struct CoreGameEvent(pub GameEvent);
@@ -44,15 +45,10 @@ impl Default for GameTickTimer {
 pub struct CoreBridge {
     pub world: robbo_core::World,
     pub history: robbo_core::CommandHistory,
-    /// Input for the NEXT tick (filled by keyboard_input, consumed by tick system).
-    pub pending_input: Option<PlayerInput>,
-    /// Input buffered during animation (promoted to pending when anim ends).
-    pub queued_input: Option<PlayerInput>,
-    pub animating: bool,
     pub events_queue: Vec<GameEvent>,
     /// Direction Robbo last actually moved (used for shooting).
     pub last_direction: Direction,
-    /// Visual facing — updated *immediately* on keypress, no tick needed.
+    /// Visual facing — updated immediately on turn or move.
     pub facing_direction: Direction,
     /// Which frame of the 6-frame walk cycle is currently shown (0-5).
     pub walk_frame: usize,
@@ -63,9 +59,6 @@ impl Default for CoreBridge {
         Self {
             world: robbo_core::World::empty(16, 16),
             history: robbo_core::CommandHistory::new(),
-            pending_input: None,
-            queued_input: None,
-            animating: false,
             events_queue: Vec::new(),
             last_direction: Direction::Down,
             facing_direction: Direction::Down,
@@ -74,21 +67,10 @@ impl Default for CoreBridge {
     }
 }
 
-/// Buffer player input that arrives while a visual tween is running.
-pub fn buffer_input_while_animating(mut bridge: ResMut<CoreBridge>, state: Res<State<AppState>>) {
-    if *state.get() != AppState::Playing || !bridge.animating {
-        return;
-    }
-    if let Some(input) = bridge.pending_input.take() {
-        bridge.queued_input = Some(input);
-    }
-}
-
-/// Core game tick: fire every TICK_SECS (or immediately on player input).
-/// Uses the buffered player input if available, otherwise sends PlayerInput::Wait
-/// so enemies, guns, and bullets advance even when Robbo stands still.
+/// Core game tick: fire every TICK_SECS regardless of visual animation.
 pub fn game_tick_system(
     mut bridge: ResMut<CoreBridge>,
+    mut steering: ResMut<SteeringState>,
     mut tick_timer: ResMut<GameTickTimer>,
     mut core_events: EventWriter<CoreGameEvent>,
     state: Res<State<AppState>>,
@@ -98,29 +80,26 @@ pub fn game_tick_system(
     if *state.get() != AppState::Playing || countdown.blocks_input() {
         return;
     }
-    if bridge.animating {
-        // Timer keeps ticking but we can't step while animating.
-        tick_timer.0.tick(time.delta());
-        return;
-    }
 
-    let has_player_input = bridge.pending_input.is_some();
     tick_timer.0.tick(time.delta());
-    let timer_fired = tick_timer.0.just_finished();
-
-    // Step when: the player just gave input (immediate) OR the tick timer fired.
-    if !has_player_input && !timer_fired {
+    if !tick_timer.0.just_finished() {
         return;
     }
-    // Player input resets the timer so the next auto-tick is a full interval away.
-    if has_player_input {
-        tick_timer.0.reset();
-    }
 
-    let input = bridge.pending_input.take().unwrap_or(PlayerInput::Wait);
+    let input = if steering.shoot_pending {
+        steering.shoot_pending = false;
+        PlayerInput::Shoot(bridge.last_direction)
+    } else if let Some(dir) = steering.hold {
+        PlayerInput::Move(dir)
+    } else if let Some(dir) = steering.tap_move.take() {
+        PlayerInput::Move(dir)
+    } else {
+        PlayerInput::Wait
+    };
+
     if let PlayerInput::Move(dir) = input {
         bridge.last_direction = dir;
-        bridge.facing_direction = dir; // keep in sync on actual movement
+        bridge.facing_direction = dir;
     }
 
     let before = bridge.world.snapshot();
@@ -129,7 +108,6 @@ pub fn game_tick_system(
         bridge.history.record(before);
     }
 
-    // Advance walk cycle when Robbo actually moved (not blocked).
     let robbo_id = bridge.world.robbo_id;
     let robbo_moved = events
         .iter()
@@ -143,17 +121,4 @@ pub fn game_tick_system(
         core_events.send(CoreGameEvent(e.clone()));
     }
     bridge.events_queue = events;
-    if !bridge.events_queue.is_empty() {
-        bridge.animating = true;
-    }
-}
-
-/// When animation completes, promote buffered input to pending so the next
-/// tick can use it immediately.
-pub fn release_queued_input(mut bridge: ResMut<CoreBridge>) {
-    if !bridge.animating && bridge.pending_input.is_none() {
-        if let Some(q) = bridge.queued_input.take() {
-            bridge.pending_input = Some(q);
-        }
-    }
 }

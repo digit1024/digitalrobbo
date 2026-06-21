@@ -61,10 +61,14 @@ pub enum ElementKind {
         direction: Direction,
         from_player: bool,
     },
-    /// Solid laser beam segment (gnurobbo LASER_L / LASER_D).
+    /// Laser beam segment (gnurobbo LASER_L / LASER_D).
     Laser {
         direction: Direction,
         source_id: Option<u32>,
+        /// `false` = moving bolt (regular gun / player); `true` = solid beam segment.
+        solid: bool,
+        /// Solid laser reflection state at obstacles.
+        returning: bool,
     },
     /// Blaster spread cell.
     BlasterCell {

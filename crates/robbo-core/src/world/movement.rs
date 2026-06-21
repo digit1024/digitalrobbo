@@ -253,6 +253,17 @@ impl World {
         })
     }
 
+    /// Turn Robbo in place without moving (sim facing for shooting).
+    pub fn turn_robbo(&mut self, dir: Direction) {
+        if let Some((_, state)) = self
+            .elements
+            .iter_mut()
+            .find(|(_, s)| matches!(s.kind, ElementKind::Robbo))
+        {
+            state.direction = dir;
+        }
+    }
+
     pub(crate) fn try_shoot(&mut self, dir: Direction, events: &mut Vec<GameEvent>) {
         if self.ammo == 0 {
             return;
@@ -262,12 +273,22 @@ impl World {
         };
         let (dc, dr) = dir.delta();
         let spawn = from.offset(dc, dr);
-        if !self.in_bounds(spawn) || self.is_blocked(spawn) {
+        if !self.in_bounds(spawn) {
             return;
         }
+        if self.tile_at(spawn).is_some_and(|t| t.blocks_shot()) {
+            return;
+        }
+
         self.ammo -= 1;
         events.push(GameEvent::Shot { from, direction: dir });
+
         let proj_id = self.allocate_id();
+        if let Some(hit) = self.resolve_projectile_hit(spawn, true, proj_id) {
+            self.apply_projectile_hit_actions(&hit, events);
+            return;
+        }
+
         self.elements.push((
             spawn,
             ElementState::new(
