@@ -1,4 +1,5 @@
-/// Generic object pool for projectiles and particle effects.
+/// Generic object pool for high-churn visuals (shot trails, particles).
+/// Teleport bursts use simple spawn/despawn via `effects` until churn warrants pooling.
 pub struct Pool<T> {
     free: Vec<T>,
 }

@@ -73,5 +73,5 @@ While `progress < 1.0`, queue at most one pending `PlayerInput`. On completion, 
 | Push | 140 ms | Robbo + box synchronized |
 | Shoot arm | 80 ms | then spawn projectile |
 | Projectile | per-cell | original speed parity |
-| Teleport | 200 ms | fade out + in |
+| Teleport | 200 ms | fade out + in; `FxParticle` burst at portals ([11-visual-effects.md](11-visual-effects.md)) |
 | Death | 300 ms | before respawn/restart |

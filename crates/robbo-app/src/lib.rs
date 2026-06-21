@@ -4,6 +4,7 @@ mod audio;
 mod bridge;
 mod camera;
 mod editor;
+mod effects;
 mod input;
 mod interpolation;
 mod intro;
@@ -29,6 +30,7 @@ use bevy::log::LogPlugin;
 use bevy::prelude::*;
 use bevy::winit::{WakeUp, WinitPlugin};
 use bridge::{CoreBridge, EntityMap, GameSession, GameTickTimer, LoadLevelEvent, ReloadVisualsEvent, TileEntityMap};
+use effects::{fx_on_core_events, tick_fx_particles};
 use input::{apply_test_input, InputCooldown, SteeringState, TestInputInject};
 use intro::{setup_intro, spawn_intro, start_intro_audio};
 use levels::{LevelRegistry, LevelSelection};
@@ -135,6 +137,7 @@ fn configure_app(app: &mut App, allow_any_thread: bool) {
             Update,
             (
                 sfx_on_core_events,
+                fx_on_core_events,
                 queue_level_bgm_on_load,
                 start_level_bgm_after_countdown,
                 unlock_audio_on_input,
@@ -189,6 +192,7 @@ fn configure_app(app: &mut App, allow_any_thread: bool) {
             (
                 render::update_robbo_sprite,
                 render::update_entity_sprites,
+                tick_fx_particles,
                 render::update_explosion_effects,
                 render::update_tile_vanish_effects,
                 render::update_teleport_reveal,

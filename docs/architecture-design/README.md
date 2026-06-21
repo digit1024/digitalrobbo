@@ -40,5 +40,6 @@ Living architecture documentation for the GNU Robbo remake. These docs evolve wi
 | [08-assets-skins.md](08-assets-skins.md) | Skin manifest, atlases, palette |
 | [09-ui-and-states.md](09-ui-and-states.md) | Screen flow, HUD, settings |
 | [10-persistence.md](10-persistence.md) | Save model, progress, best times |
+| [11-visual-effects.md](11-visual-effects.md) | Particle FX observer, presets, roadmap |
 | [glossary.md](glossary.md) | Domain terms |
 | [adr/](adr/) | Architecture Decision Records |

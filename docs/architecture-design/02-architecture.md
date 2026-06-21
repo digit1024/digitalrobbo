@@ -27,6 +27,7 @@ flowchart TB
     Input[Input systems]
     Bridge[Core bridge]
     View[View and animation]
+    FX[Effects particles]
     UI[Bevy UI]
     Audio[Audio]
   end
@@ -45,6 +46,7 @@ flowchart TB
   Bridge --> World
   World --> Events
   Events --> View
+  Events --> FX
   Parser --> World
   Bridge --> View
   UI --> Bridge
@@ -83,7 +85,7 @@ sequenceDiagram
 
 1. **Logic layer** (`robbo-core`) — grid, entities, tick, win/lose, AI
 2. **Format layer** (`robbo-formats`) — bytes/text → `Level` → `World`
-3. **Presentation layer** (`robbo-app`) — Bevy ECS, sprites, camera, UI, audio
+3. **Presentation layer** (`robbo-app`) — Bevy ECS, sprites, camera, UI, audio, [`effects/`](11-visual-effects.md) particles
 4. **Data layer** — `.dat` packs, skin RON, save files
 
 ## App state machine (high level)

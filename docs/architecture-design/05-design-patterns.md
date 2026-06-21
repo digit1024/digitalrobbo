@@ -60,7 +60,7 @@ Micro-states drive sprite frame selection; they do not affect simulation.
 Core emits `GameEvent` on each step. Bevy bridge converts to app events:
 
 ```rust
-// robbo-app
+// robbo-app — audio (sfx_on_core_events), particles (fx_on_core_events)
 fn bridge_events(mut reader: EventReader<CoreGameEvent>, /* audio, particles */) {
     for e in reader.read() {
         match e { /* spawn sounds, particles, UI updates */ }
@@ -68,11 +68,13 @@ fn bridge_events(mut reader: EventReader<CoreGameEvent>, /* audio, particles */)
 }
 ```
 
+See [11-visual-effects.md](11-visual-effects.md) for the particle pipeline.
+
 Decouples simulation from presentation side effects.
 
 ## 4. Object pool
 
-**Where:** `robbo-app` — projectiles, explosion particles, teleport effects
+**Where:** `robbo-app` — `pool.rs` (generic), `effects` (sprite particles; pool TBD for shot trails)
 
 ```rust
 struct Pool<T> {
@@ -90,4 +92,4 @@ Avoid spawn/despawn churn on WASM/mobile. Pools pre-warm on level load.
 | Command | robbo-core + app | Undo/redo |
 | State machine | robbo-app | Screens + anim states |
 | Observer | core events → app | Audio/VFX/UI reactions |
-| Object pool | robbo-app | Projectiles and particles |
+| Object pool | robbo-app | FX particles (see `effects/`), future shot trails |
