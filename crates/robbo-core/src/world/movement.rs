@@ -128,10 +128,7 @@ impl World {
                 ElementKind::Bear { .. }
                 | ElementKind::BlackBear { .. }
                 | ElementKind::Bird { .. }
-                | ElementKind::Butterfly => {
-                    self.kill_robbo(DeathCause::Enemy, events);
-                    return;
-                }
+                | ElementKind::Butterfly => return,
                 _ => return,
             }
         } else if self.is_blocked(target) {

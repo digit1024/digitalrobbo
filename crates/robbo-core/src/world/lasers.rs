@@ -352,10 +352,12 @@ impl World {
             let (dc, dr) = direction.delta();
             let next = cell.offset(dc, dr);
 
-            if self.in_bounds(next)
-                && !self.tile_at(next).is_some_and(|t| t.blocks_shot())
-                && self.robbo_cell() != Some(next)
-            {
+            if self.robbo_cell() == Some(next) {
+                self.kill_robbo(DeathCause::Projectile, events);
+                return;
+            }
+
+            if self.in_bounds(next) && !self.tile_at(next).is_some_and(|t| t.blocks_shot()) {
                 if let Some((_, el)) = self.element_at(next) {
                     if Self::is_blaster_immune(&el.kind) {
                         // stop propagation

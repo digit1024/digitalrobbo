@@ -5,8 +5,23 @@ use crate::events::{DeathCause, GameEvent};
 use crate::world::World;
 
 impl World {
+    /// gnurobbo `is_robbo_killed()` — orthogonal adjacency to killing enemies.
+    pub(crate) fn check_adjacent_enemy_kill(&mut self, events: &mut Vec<GameEvent>) {
+        let Some(robbo) = self.robbo_cell() else {
+            return;
+        };
+        for (dc, dr) in [(1, 0), (-1, 0), (0, 1), (0, -1)] {
+            let neighbor = robbo.offset(dc, dr);
+            if let Some((_, el)) = self.element_at(neighbor) {
+                if Self::is_killing_enemy(&el.kind) {
+                    self.kill_robbo(DeathCause::Enemy, events);
+                    return;
+                }
+            }
+        }
+    }
+
     pub(crate) fn tick_enemies(&mut self, events: &mut Vec<GameEvent>) {
-        let robbo = self.robbo_cell();
         let snapshot: Vec<(Cell, ElementState)> = self
             .elements
             .iter()
@@ -105,10 +120,6 @@ impl World {
             }
 
             let mv = if new_cell != *cell { Some(new_cell) } else { None };
-            if mv == Some(new_cell) && robbo == Some(new_cell) {
-                self.kill_robbo(DeathCause::Enemy, events);
-                return;
-            }
             updates.push((id, tick_counter, direction, mv));
         }
 

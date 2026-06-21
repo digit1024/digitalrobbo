@@ -256,6 +256,17 @@ impl World {
         matches!(kind, ElementKind::Gun { movable: false, .. })
     }
 
+    /// gnurobbo `killing = 1` — bear, bird, butterfly kill by orthogonal adjacency.
+    pub(crate) fn is_killing_enemy(kind: &ElementKind) -> bool {
+        matches!(
+            kind,
+            ElementKind::Bear { .. }
+                | ElementKind::BlackBear { .. }
+                | ElementKind::Bird { .. }
+                | ElementKind::Butterfly
+        )
+    }
+
     pub fn step(&mut self, input: PlayerInput) -> Vec<GameEvent> {
         if self.status != LevelStatus::Playing {
             return Vec::new();
@@ -263,6 +274,11 @@ impl World {
 
         let mut events = Vec::new();
         self.tick += 1;
+
+        self.check_adjacent_enemy_kill(&mut events);
+        if self.status != LevelStatus::Playing {
+            return events;
+        }
 
         if self.robbo_magnet_locked {
             self.magnet_pull_robbo(&mut events);

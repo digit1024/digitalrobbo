@@ -718,4 +718,79 @@ mod tests {
             *c == Cell::new(2, 1) && matches!(s.kind, ElementKind::Gun { .. })
         }));
     }
+
+    #[test]
+    fn adjacent_enemy_kills_robbo() {
+        let w = 5u16;
+        let h = 3u16;
+        let tiles = vec![TileKind::Empty; (w * h) as usize];
+        let elements = vec![
+            (Cell::new(1, 1), robbo_at(Cell::new(1, 1))),
+            (
+                Cell::new(2, 1),
+                ElementState::new(
+                    2,
+                    ElementKind::Bear {
+                        clockwise: false,
+                    },
+                    Direction::Down,
+                ),
+            ),
+        ];
+        let mut world = make_world(w, h, tiles, elements, 0);
+        world.step(PlayerInput::Wait);
+        assert_eq!(world.status, LevelStatus::Failed);
+    }
+
+    #[test]
+    fn walk_into_enemy_cell_blocked_not_same_cell_death() {
+        let w = 6u16;
+        let h = 3u16;
+        let tiles = vec![TileKind::Empty; (w * h) as usize];
+        let elements = vec![
+            (Cell::new(3, 1), robbo_at(Cell::new(3, 1))),
+            (
+                Cell::new(4, 1),
+                ElementState::new(
+                    2,
+                    ElementKind::Bear {
+                        clockwise: false,
+                    },
+                    Direction::Down,
+                ),
+            ),
+        ];
+        let mut world = make_world(w, h, tiles, elements, 0);
+        let mut events = Vec::new();
+        world.try_move_robbo(Direction::Right, &mut events);
+        assert_eq!(world.robbo_cell(), Some(Cell::new(3, 1)));
+        assert_eq!(world.status, LevelStatus::Playing);
+        assert!(!events.iter().any(|e| matches!(e, GameEvent::Died { .. })));
+    }
+
+    #[test]
+    fn blaster_wave_kills_robbo_on_path() {
+        let w = 6u16;
+        let h = 4u16;
+        let tiles = vec![TileKind::Empty; (w * h) as usize];
+        let elements = vec![
+            (Cell::new(4, 1), robbo_at(Cell::new(4, 1))),
+            (
+                Cell::new(3, 1),
+                ElementState::new(
+                    2,
+                    ElementKind::BlasterCell {
+                        direction: Direction::Right,
+                        frame: 0,
+                    },
+                    Direction::Right,
+                ),
+            ),
+        ];
+        let mut world = make_world(w, h, tiles, elements, 0);
+        for _ in 0..4 {
+            world.step(PlayerInput::Wait);
+        }
+        assert_eq!(world.status, LevelStatus::Failed);
+    }
 }
