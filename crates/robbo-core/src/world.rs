@@ -721,42 +721,40 @@ impl World {
             return;
         }
         events.push(GameEvent::Exploded { at });
-        let neighbors = [
-            at,
-            at.offset(1, 0),
-            at.offset(-1, 0),
-            at.offset(0, 1),
-            at.offset(0, -1),
-        ];
-        let mut chain_cells = Vec::new();
-        for n in neighbors {
-            if !self.in_bounds(n) {
-                continue;
+
+        let mut affected = std::collections::HashSet::new();
+        for dc in -1..=1 {
+            for dr in -1..=1 {
+                let n = at.offset(dc, dr);
+                if self.in_bounds(n) {
+                    affected.insert(n);
+                }
             }
-            if self.robbo_cell() == Some(n) {
+        }
+
+        let mut chain_cells = Vec::new();
+        for n in &affected {
+            if self.robbo_cell() == Some(*n) {
                 self.kill_robbo(DeathCause::Explosion, events);
             }
             for (c, s) in &self.elements {
-                if *c == n && matches!(s.kind, ElementKind::Bomb) {
-                    chain_cells.push(n);
+                if *c == *n && matches!(s.kind, ElementKind::Bomb) {
+                    chain_cells.push(*n);
                 }
             }
-            self.elements.retain(|(c, s)| {
-                if *c != n {
-                    return true;
-                }
-                !matches!(
-                    s.kind,
-                    ElementKind::Bomb
-                        | ElementKind::Box
-                        | ElementKind::PushBox
-                        | ElementKind::Bear { .. }
-                        | ElementKind::BlackBear { .. }
-                        | ElementKind::Bird { .. }
-                        | ElementKind::Butterfly
-                )
-            });
         }
+
+        // Original digit1024: kill every object in the 3×3 area except bullets.
+        self.elements.retain(|(c, s)| {
+            if !affected.contains(c) {
+                return true;
+            }
+            matches!(
+                s.kind,
+                ElementKind::Projectile { .. } | ElementKind::Robbo
+            )
+        });
+
         for cell in chain_cells {
             self.explode_at_inner(cell, events, depth + 1);
         }
@@ -977,7 +975,7 @@ mod tests {
         let elements = vec![
             (Cell::new(0, 1), robbo_at(Cell::new(0, 1))),
             (
-                Cell::new(1, 1),
+                Cell::new(2, 1),
                 ElementState {
                     id: 2,
                     kind: ElementKind::Bomb,
@@ -987,7 +985,7 @@ mod tests {
                 },
             ),
             (
-                Cell::new(2, 1),
+                Cell::new(3, 1),
                 ElementState {
                     id: 3,
                     kind: ElementKind::Bomb,
@@ -998,8 +996,60 @@ mod tests {
             ),
         ];
         let mut world = make_world(w, h, tiles, elements, 0);
-        world.step(PlayerInput::Move(Direction::Right));
+        world.ammo = 1;
+        world.step(PlayerInput::Shoot(Direction::Right));
+        world.step(PlayerInput::Wait);
+        world.step(PlayerInput::Wait);
         assert!(world.elements.iter().all(|(_, s)| !matches!(s.kind, ElementKind::Bomb)));
+    }
+
+    #[test]
+    fn bomb_explodes_full_3x3_area() {
+        let w = 6u16;
+        let h = 5u16;
+        let tiles = vec![TileKind::Empty; (w * h) as usize];
+        let box_at = |id: u32, col: i16, row: i16| {
+            (
+                Cell::new(col, row),
+                ElementState {
+                    id,
+                    kind: ElementKind::Box,
+                    direction: Direction::Down,
+                    tick_counter: 0,
+                    hidden: false,
+                },
+            )
+        };
+        let elements = vec![
+            (Cell::new(0, 2), robbo_at(Cell::new(0, 2))),
+            (
+                Cell::new(2, 2),
+                ElementState {
+                    id: 2,
+                    kind: ElementKind::Bomb,
+                    direction: Direction::Down,
+                    tick_counter: 0,
+                    hidden: false,
+                },
+            ),
+            box_at(3, 1, 1), // diagonal
+            box_at(4, 3, 2), // cardinal
+            box_at(5, 2, 3), // below center
+            box_at(6, 4, 2), // outside 3×3 — must survive
+        ];
+        let mut world = make_world(w, h, tiles, elements, 0);
+        world.ammo = 1;
+        // Projectile reaches bomb on the same step (spawn at 1,2 then tick to 2,2).
+        world.step(PlayerInput::Shoot(Direction::Right));
+
+        assert!(world.elements.iter().all(|(_, s)| !matches!(s.kind, ElementKind::Bomb)));
+        assert!(!world.elements.iter().any(|(c, s)| {
+            matches!(s.kind, ElementKind::Box) && *c != Cell::new(4, 2)
+        }));
+        assert!(world
+            .elements
+            .iter()
+            .any(|(c, s)| *c == Cell::new(4, 2) && matches!(s.kind, ElementKind::Box)));
     }
 
     #[test]

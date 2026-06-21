@@ -18,9 +18,52 @@ pub struct TileSprite {
 #[derive(Component)]
 pub struct LevelRoot;
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Per-tick sync (spawn/despawn entities, update VisualMotion targets)
-// ─────────────────────────────────────────────────────────────────────────────
+#[derive(Component)]
+pub struct ExplosionEffect {
+    pub timer: Timer,
+}
+
+const EXPLOSION_SECS: f32 = 0.35;
+
+fn spawn_explosion_effect(
+    commands: &mut Commands,
+    projection: &ActiveProjection,
+    cell: Cell,
+    level_root: Option<Entity>,
+) {
+    let pos = projection.project(cell, 2.0);
+    let tile = projection.tile_size();
+    let mut entity = commands.spawn((
+        Sprite {
+            color: Color::srgba(1.0, 0.55, 0.05, 0.95),
+            custom_size: Some(Vec2::splat(tile * 1.4)),
+            ..default()
+        },
+        Transform::from_translation(pos).with_scale(Vec3::splat(0.15)),
+        ExplosionEffect {
+            timer: Timer::from_seconds(EXPLOSION_SECS, TimerMode::Once),
+        },
+    ));
+    if let Some(root) = level_root {
+        entity.set_parent(root);
+    }
+}
+
+pub fn update_explosion_effects(
+    time: Res<Time>,
+    mut commands: Commands,
+    mut query: Query<(Entity, &mut Transform, &mut Sprite, &mut ExplosionEffect)>,
+) {
+    for (entity, mut transform, mut sprite, mut effect) in &mut query {
+        effect.timer.tick(time.delta());
+        let t = (effect.timer.elapsed_secs() / EXPLOSION_SECS).clamp(0.0, 1.0);
+        transform.scale = Vec3::splat(0.15 + t * 1.35);
+        sprite.color = Color::srgba(1.0, 0.55, 0.05, 0.95 * (1.0 - t));
+        if effect.timer.finished() {
+            commands.entity(entity).despawn();
+        }
+    }
+}
 
 pub fn sync_visuals(
     mut bridge: ResMut<CoreBridge>,
@@ -96,6 +139,14 @@ pub fn sync_visuals(
     if !bridge.events_queue.is_empty() {
         for event in &bridge.events_queue {
             match event {
+                GameEvent::Exploded { at } => {
+                    spawn_explosion_effect(
+                        &mut commands,
+                        &projection,
+                        *at,
+                        level_roots.iter().next(),
+                    );
+                }
                 GameEvent::Moved { entity_id, from, to }
                 | GameEvent::Pushed { entity_id, from, to }
                 | GameEvent::Teleported { entity_id, from, to } => {

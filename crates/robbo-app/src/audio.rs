@@ -276,7 +276,7 @@ pub fn sfx_on_core_events(
                 ElementKind::ExtraLife => Some("collected_life"),
                 _ => None,
             },
-            GameEvent::Exploded { .. } => Some("bomb"),
+            GameEvent::Exploded { .. } => Some("explosion"),
             GameEvent::DoorOpened => Some("door"),
             GameEvent::Teleported { .. } => Some("teleport"),
             GameEvent::Died { entity_id, .. } if *entity_id == bridge.world.robbo_id => {

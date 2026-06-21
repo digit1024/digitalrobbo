@@ -183,7 +183,10 @@ fn configure_app(app: &mut App, allow_any_thread: bool) {
         .add_systems(OnExit(AppState::GameOver), ui::cleanup_overlay)
         .add_systems(
             Update,
-            render::update_robbo_sprite
+            (
+                render::update_robbo_sprite,
+                render::update_explosion_effects,
+            )
                 .after(render::sync_visuals)
                 .before(interpolation::advance_interpolation_system),
         );
