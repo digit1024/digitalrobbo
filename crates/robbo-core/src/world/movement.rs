@@ -135,6 +135,14 @@ impl World {
             return;
         }
 
+        // Re-resolve after `remove(idx)` in collect branches — index may have shifted.
+        let Some(robbo_idx) = self
+            .elements
+            .iter()
+            .position(|(_, s)| s.id == robbo_id)
+        else {
+            return;
+        };
         self.elements[robbo_idx].0 = target;
         self.elements[robbo_idx].1.direction = dir;
         events.push(GameEvent::Moved {

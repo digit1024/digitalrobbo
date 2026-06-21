@@ -7,6 +7,7 @@ mod editor;
 mod effects;
 mod input;
 mod interpolation;
+#[allow(dead_code)]
 mod intro;
 mod iso;
 mod levels;
@@ -36,7 +37,6 @@ use effects::{
     tick_teleport_auras, update_screw_visuals,
 };
 use input::{apply_test_input, InputCooldown, SteeringState, TestInputInject};
-use intro::{setup_intro, spawn_intro, start_intro_audio};
 use levels::{LevelRegistry, LevelSelection};
 use menu::{
     animate_menu_planet, cleanup_main_menu, load_game_font, menu_navigate, spawn_main_menu,
@@ -111,7 +111,6 @@ fn configure_app(app: &mut App, allow_any_thread: bool) {
                 load_audio_manifest,
                 camera::load_camera_config,
                 load_game_font,
-                setup_intro,
             ),
         )
         .add_systems(
@@ -148,11 +147,6 @@ fn configure_app(app: &mut App, allow_any_thread: bool) {
                 start_level_bgm_after_countdown,
                 unlock_audio_on_input,
                 ui_anim::tick_ui_fade,
-                intro::spawn_intro,
-                intro::intro_title_fly,
-                intro::update_intro_sequence,
-                intro::intro_title_music,
-                intro::intro_skip_input,
                 animate_menu_planet,
                 update_menu_highlight,
                 menu_navigate,
@@ -167,11 +161,6 @@ fn configure_app(app: &mut App, allow_any_thread: bool) {
             OnExit(AppState::Playing),
             (ui::cleanup_hud, ui::cleanup_countdown_overlay),
         )
-        .add_systems(
-            OnEnter(AppState::Intro),
-            (start_intro_audio, log_state::<AppState>),
-        )
-        .add_systems(OnExit(AppState::Intro), intro::cleanup_intro)
         .add_systems(
             OnEnter(AppState::MainMenu),
             (spawn_main_menu, play_menu_bgm, log_state::<AppState>),
@@ -222,7 +211,7 @@ fn setup(
     commands.spawn(Camera2d::default());
     commands.insert_resource(SpriteAssets::load(&asset_server));
     bevy::log::info!("DigitalRobbo starting");
-    next.set(AppState::Intro);
+    next.set(AppState::MainMenu);
 }
 
 fn log_state<S: States>(state: Res<State<S>>) {

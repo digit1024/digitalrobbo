@@ -284,6 +284,33 @@ mod tests {
     }
 
     #[test]
+    fn move_and_collect_screw_when_screw_before_robbo_in_vec() {
+        let w = 5u16;
+        let h = 5u16;
+        let tiles = vec![TileKind::Empty; (w * h) as usize];
+        // Level load order: screw at index 0, Robbo at index 1.
+        let elements = vec![
+            (
+                Cell::new(2, 1),
+                ElementState::new(2, ElementKind::Screw, Direction::Down),
+            ),
+            (Cell::new(2, 2), robbo_at(Cell::new(2, 2))),
+        ];
+        let mut world = make_world(w, h, tiles, elements, 1);
+        let events = world.step(PlayerInput::Move(Direction::Up));
+        assert!(events.iter().any(|e| matches!(e, GameEvent::Collected { .. })));
+        assert_eq!(world.robbo_cell(), Some(Cell::new(2, 1)));
+        assert!(events.iter().any(|e| matches!(
+            e,
+            GameEvent::Moved {
+                entity_id: 1,
+                from,
+                to
+            } if *from == Cell::new(2, 2) && *to == Cell::new(2, 1)
+        )));
+    }
+
+    #[test]
     fn push_box() {
         let w = 6u16;
         let h = 4u16;
