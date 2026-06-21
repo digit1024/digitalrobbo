@@ -2,6 +2,8 @@ use bevy::prelude::*;
 use robbo_formats::{LevelPack, parse_pack, parse_pack_str};
 use std::path::Path;
 
+include!(concat!(env!("OUT_DIR"), "/level_packs.rs"));
+
 #[derive(Resource, Default)]
 pub struct LevelRegistry {
     pub packs: Vec<LevelPack>,
@@ -11,25 +13,21 @@ impl LevelRegistry {
     pub fn load_builtin() -> Self {
         let mut packs = Vec::new();
 
-        // Real GPL level packs ship first; the 5x5 sample fixture is only a
-        // fallback if no real pack can be loaded.
-        let binary_packs = [
-            include_bytes!("../../../assets/levels/original.dat").as_slice(),
-            include_bytes!("../../../assets/levels/robbo01.dat").as_slice(),
-        ];
-        for bytes in binary_packs {
+        for (filename, bytes) in PACK_FILES {
             match parse_pack(bytes) {
                 Ok(pack) => {
                     bevy::log::info!(
-                        "Loaded level pack '{}' ({} levels)",
+                        "Loaded level pack '{}' from {filename} ({} levels)",
                         pack.name,
                         pack.levels.len()
                     );
                     packs.push(pack);
                 }
-                Err(e) => bevy::log::warn!("Failed to parse level pack: {e}"),
+                Err(e) => bevy::log::warn!("Failed to parse level pack {filename}: {e}"),
             }
         }
+
+        sort_packs(&mut packs);
 
         if packs.is_empty() {
             bevy::log::warn!("No real level packs loaded — falling back to sample");
@@ -53,6 +51,17 @@ impl LevelRegistry {
     }
 }
 
+/// Match GNU Robbo: alphabetical by pack name, with `Original` first.
+fn sort_packs(packs: &mut Vec<LevelPack>) {
+    packs.sort_by(|a, b| a.name.cmp(&b.name));
+    if let Some(pos) = packs.iter().position(|p| p.name == "Original") {
+        if pos != 0 {
+            let original = packs.remove(pos);
+            packs.insert(0, original);
+        }
+    }
+}
+
 #[derive(Resource, Default)]
 pub struct LevelSelection {
     pub pack_index: usize,
@@ -64,5 +73,20 @@ impl LevelSelection {
         registry
             .pack_by_index(self.pack_index)
             .and_then(|p| p.levels.get(self.level_index))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn all_builtin_packs_parse() {
+        let registry = LevelRegistry::load_builtin();
+        assert!(
+            registry.packs.len() >= 27,
+            "expected all GNU Robbo packs, got {}",
+            registry.packs.len()
+        );
     }
 }

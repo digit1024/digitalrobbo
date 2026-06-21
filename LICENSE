@@ -58,5 +58,5 @@ GNU General Public License for more details.
 You should have received a copy of the GNU General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-Level packs `original.dat` and `robbo01.dat` are derived from GNU Robbo
+Level packs in `assets/levels/` are derived from GNU Robbo 0.65.6
 and are distributed under the same GPL-3.0-or-later license.

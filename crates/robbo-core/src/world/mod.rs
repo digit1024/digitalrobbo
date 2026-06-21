@@ -260,10 +260,7 @@ impl World {
     pub(crate) fn is_walkable_element(kind: &ElementKind) -> bool {
         matches!(
             kind,
-            ElementKind::Screw
-                | ElementKind::BulletPickup
-                | ElementKind::Key
-                | ElementKind::Capsule
+            ElementKind::Screw | ElementKind::BulletPickup | ElementKind::Key
         )
     }
 
@@ -503,7 +500,6 @@ impl World {
                 | ElementKind::PushBox
                 | ElementKind::Screw
                 | ElementKind::Key
-                | ElementKind::Capsule
                 | ElementKind::BulletPickup
                 | ElementKind::Bomb
                 | ElementKind::QuestionMark { .. }

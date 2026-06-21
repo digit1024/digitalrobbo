@@ -970,4 +970,91 @@ mod tests {
             Some(Cell::new(3, 1))
         );
     }
+
+    #[test]
+    fn capsule_not_pushable() {
+        let w = 7u16;
+        let h = 3u16;
+        let tiles = vec![TileKind::Empty; (w * h) as usize];
+        let elements = vec![
+            (Cell::new(1, 1), robbo_at(Cell::new(1, 1))),
+            (
+                Cell::new(2, 1),
+                ElementState::new(2, ElementKind::Box, Direction::Down),
+            ),
+            (
+                Cell::new(3, 1),
+                ElementState::new(3, ElementKind::Capsule, Direction::Down),
+            ),
+        ];
+        let mut world = make_world(w, h, tiles, elements, 0);
+        world.step(PlayerInput::Move(Direction::Right));
+        assert_eq!(world.robbo_cell(), Some(Cell::new(1, 1)));
+        assert!(
+            world
+                .elements
+                .iter()
+                .any(|(c, s)| *c == Cell::new(3, 1) && matches!(s.kind, ElementKind::Capsule))
+        );
+    }
+
+    #[test]
+    fn enemies_cannot_enter_capsule() {
+        let w = 6u16;
+        let h = 4u16;
+        let tiles = vec![TileKind::Empty; (w * h) as usize];
+        let elements = vec![
+            (
+                Cell::new(1, 1),
+                ElementState::new(
+                    2,
+                    ElementKind::Bird {
+                        variant: crate::element::BirdVariant::Horizontal,
+                        shooting: false,
+                    },
+                    Direction::Right,
+                ),
+            ),
+            (
+                Cell::new(2, 1),
+                ElementState::new(3, ElementKind::Capsule, Direction::Down),
+            ),
+        ];
+        let mut world = make_world(w, h, tiles, elements, 0);
+        assert!(world.is_blocked_for_enemy(Cell::new(2, 1)));
+        for _ in 0..20 {
+            world.step(PlayerInput::Wait);
+        }
+        assert!(
+            world
+                .elements
+                .iter()
+                .all(|(c, s)| !(matches!(s.kind, ElementKind::Bird { .. }) && *c == Cell::new(2, 1)))
+        );
+    }
+
+    #[test]
+    fn bomb_does_not_destroy_capsule() {
+        let w = 5u16;
+        let h = 3u16;
+        let tiles = vec![TileKind::Empty; (w * h) as usize];
+        let elements = vec![
+            (
+                Cell::new(1, 1),
+                ElementState::new(2, ElementKind::Bomb, Direction::Down),
+            ),
+            (
+                Cell::new(2, 1),
+                ElementState::new(3, ElementKind::Capsule, Direction::Down),
+            ),
+        ];
+        let mut world = make_world(w, h, tiles, elements, 0);
+        world.explode_at(Cell::new(1, 1), &mut Vec::new());
+        assert!(
+            world
+                .elements
+                .iter()
+                .any(|(_, s)| matches!(s.kind, ElementKind::Capsule))
+        );
+    }
 }
