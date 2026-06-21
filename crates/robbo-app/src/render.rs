@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 use robbo_core::{Cell, GameEvent, TileKind};
 
-use crate::assets::{SpriteAssets, TILE_PX};
+use crate::assets::{SpriteAssets, dir_to_idx, TILE_PX};
 use crate::bridge::{CoreBridge, EntityMap, ReloadVisualsEvent};
 use crate::interpolation::{VisualEntityId, VisualMotion, interpolated_pos};
 use crate::projection::ActiveProjection;
@@ -109,6 +109,35 @@ pub fn sync_visuals(
         // not events_queue, to decide when the tween is complete.
         bridge.events_queue.clear();
     }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Robbo sprite animation (runs every frame, independent of ticks)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Updates the Robbo sprite image every frame to reflect the current facing
+/// direction and walk-cycle frame.  Runs after sync_visuals so the entity is
+/// guaranteed to exist in entity_map.
+pub fn update_robbo_sprite(
+    bridge: Res<CoreBridge>,
+    entity_map: Res<EntityMap>,
+    assets: Option<Res<SpriteAssets>>,
+    mut query: Query<(&VisualEntityId, &mut Sprite)>,
+) {
+    let Some(ref sa) = assets else { return; };
+    let robbo_id = bridge.world.robbo_id;
+    if robbo_id == 0 {
+        return;
+    }
+    let Some(entity) = entity_map.0.get(&robbo_id) else {
+        return;
+    };
+    let Ok((_, mut sprite)) = query.get_mut(*entity) else {
+        return;
+    };
+    let dir_idx = dir_to_idx(bridge.facing_direction);
+    let frame = bridge.walk_frame;
+    sprite.image = sa.player[dir_idx][frame].clone();
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

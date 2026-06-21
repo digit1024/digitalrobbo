@@ -2,13 +2,41 @@ use bevy::prelude::*;
 use robbo_core::GameEvent;
 
 use crate::app_state::AppState;
+use crate::audio::{play_countdown_tick, GameAudio};
 use crate::bridge::{CoreBridge, CoreGameEvent, GameSession, LoadLevelEvent, ReloadVisualsEvent};
 use crate::levels::{LevelRegistry, LevelSelection};
 use crate::persistence::{GameSave, LevelProgress, persist_save};
+
 #[derive(Resource, Default)]
 pub struct SpeedrunTimer {
     pub elapsed_ms: u64,
     pub running: bool,
+}
+
+/// 3-2-1 countdown before gameplay input (skipped on restart).
+#[derive(Resource)]
+pub struct LevelCountdown {
+    pub active: bool,
+    pub display: u8,
+    pub timer: Timer,
+    pub skip: bool,
+}
+
+impl Default for LevelCountdown {
+    fn default() -> Self {
+        Self {
+            active: false,
+            display: 0,
+            timer: Timer::from_seconds(1.0, TimerMode::Once),
+            skip: false,
+        }
+    }
+}
+
+impl LevelCountdown {
+    pub fn blocks_input(&self) -> bool {
+        self.active && !self.skip
+    }
 }
 
 #[derive(Component)]
@@ -17,14 +45,23 @@ pub struct HudText;
 #[derive(Component)]
 pub struct OverlayText;
 
+#[derive(Component)]
+pub struct CountdownText;
+
 pub fn load_level_system(
+    mut commands: Commands,
     mut events: EventReader<LoadLevelEvent>,
     mut bridge: ResMut<CoreBridge>,
     mut session: ResMut<GameSession>,
     mut timer: ResMut<SpeedrunTimer>,
+    mut countdown: ResMut<LevelCountdown>,
     registry: Res<LevelRegistry>,
     selection: Res<LevelSelection>,
     mut reload: EventWriter<ReloadVisualsEvent>,
+    audio: Res<GameAudio>,
+    save: Res<GameSave>,
+    window: Query<&Window, With<bevy::window::PrimaryWindow>>,
+    countdown_entities: Query<Entity, With<CountdownText>>,
 ) {
     for ev in events.read() {
         let Some(level) = selection.selected_level(&registry) else {
@@ -47,7 +84,43 @@ pub fn load_level_system(
         session.level_label = format!("{} #{}", pack.name, level.index);
 
         timer.elapsed_ms = 0;
-        timer.running = true;
+        timer.running = false;
+
+        for entity in &countdown_entities {
+            commands.entity(entity).despawn();
+        }
+
+        if ev.restart {
+            countdown.skip = true;
+            countdown.active = false;
+            countdown.display = 0;
+        } else {
+            countdown.skip = false;
+            countdown.active = true;
+            countdown.display = 3;
+            countdown.timer = Timer::from_seconds(1.0, TimerMode::Once);
+
+            let scale = window
+                .get_single()
+                .map(|w| crate::viewport::ui_scale(w))
+                .unwrap_or(1.0);
+            commands.spawn((
+                Text::new("3"),
+                TextFont {
+                    font_size: 96.0 * scale,
+                    ..default()
+                },
+                TextColor(Color::srgb(1.0, 0.9, 0.2)),
+                Node {
+                    position_type: PositionType::Absolute,
+                    top: Val::Percent(38.0),
+                    left: Val::Percent(48.0),
+                    ..default()
+                },
+                CountdownText,
+            ));
+            play_countdown_tick(&mut commands, &audio, &save);
+        }
 
         bevy::log::info!(
             "Loaded level {} ({}x{}) from pack '{}'",
@@ -120,7 +193,6 @@ fn overlay_label(
     timer: &SpeedrunTimer,
 ) -> String {
     match state {
-        AppState::MainMenu => "DigitalRobbo\n\nPress ENTER to choose a level".to_string(),
         AppState::LevelSelect => {
             let pack = registry.pack_by_index(selection.pack_index);
             let pack_name = pack.map(|p| p.name.as_str()).unwrap_or("?");
@@ -216,6 +288,53 @@ pub fn cleanup_overlay(mut commands: Commands, q: Query<Entity, With<OverlayText
 pub fn cleanup_hud(mut commands: Commands, hud: Query<Entity, With<HudText>>) {
     for e in &hud {
         commands.entity(e).despawn();
+    }
+}
+
+pub fn cleanup_countdown_overlay(mut commands: Commands, q: Query<Entity, With<CountdownText>>) {
+    for e in &q {
+        commands.entity(e).despawn();
+    }
+}
+
+pub fn tick_level_countdown(
+    mut commands: Commands,
+    time: Res<Time>,
+    state: Res<State<AppState>>,
+    mut countdown: ResMut<LevelCountdown>,
+    mut timer: ResMut<SpeedrunTimer>,
+    mut countdown_text: Query<&mut Text, With<CountdownText>>,
+    countdown_entities: Query<Entity, With<CountdownText>>,
+) {
+    if *state.get() != AppState::Playing {
+        return;
+    }
+    if countdown.skip || !countdown.active {
+        if !countdown.active && !timer.running {
+            timer.running = true;
+        }
+        return;
+    }
+
+    countdown.timer.tick(time.delta());
+    for mut text in &mut countdown_text {
+        **text = countdown.display.to_string();
+    }
+
+    if !countdown.timer.finished() {
+        return;
+    }
+
+    if countdown.display > 1 {
+        countdown.display -= 1;
+        countdown.timer = Timer::from_seconds(1.0, TimerMode::Once);
+    } else {
+        countdown.active = false;
+        countdown.display = 0;
+        timer.running = true;
+        for entity in &countdown_entities {
+            commands.entity(entity).despawn();
+        }
     }
 }
 

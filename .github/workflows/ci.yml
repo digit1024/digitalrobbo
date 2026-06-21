@@ -17,7 +17,7 @@ jobs:
       - name: cargo check
         run: unset ARGV0 && cargo check --workspace
       - name: cargo test
-        run: unset ARGV0 && cargo test --workspace
+        run: unset ARGV0 && cargo test --workspace -- --test-threads=1
 
   wasm:
     runs-on: ubuntu-latest
@@ -28,3 +28,13 @@ jobs:
           targets: wasm32-unknown-unknown
       - name: wasm build
         run: unset ARGV0 && RUSTFLAGS="" cargo build -p robbo-app --target wasm32-unknown-unknown --release
+
+  game-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install xvfb
+        run: sudo apt-get update && sudo apt-get install -y xvfb libvulkan1 mesa-vulkan-drivers
+      - name: Game smoke test (boot, level, move, screenshot)
+        run: chmod +x scripts/run_game_smoke_test.sh && scripts/run_game_smoke_test.sh

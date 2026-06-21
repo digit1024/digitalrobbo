@@ -7,8 +7,11 @@ pub const TILE_PX: f32 = 80.0;
 /// Insert as a Resource at startup, then pass into render systems.
 #[derive(Resource)]
 pub struct SpriteAssets {
+    // ── Robbo walk cycle: [dir_idx][frame 0-5]
+    // dir_idx: right=0, down=1, left=2, up=3
+    pub player: [[Handle<Image>; 6]; 4],
     // ── entities ─────────────────────────────────────────────
-    pub robbo: Handle<Image>,
+    // (Robbo uses self.player[]; the separate `robbo` field was removed)
     pub screw: Handle<Image>,
     pub capsule: Handle<Image>,
     pub bomb: Handle<Image>,
@@ -41,10 +44,22 @@ pub struct SpriteAssets {
 }
 
 impl SpriteAssets {
+    /// Player walk frame: dir_idx matches `dir_to_idx`, frame is 0-5.
+    pub fn player_frame(&self, dir: Direction, frame: usize) -> Handle<Image> {
+        self.player[dir_to_idx(dir)][frame % 6].clone()
+    }
+
     pub fn load(server: &AssetServer) -> Self {
         let sp = |name: &str| server.load(format!("sprites/{name}.png"));
+        // dir order: right=0, down=1, left=2, up=3  (matches dir_to_idx)
+        let dir_names = ["right", "down", "left", "up"];
+        let player = std::array::from_fn(|di| {
+            std::array::from_fn(|fi| {
+                server.load(format!("sprites/player/{}_{:02}.png", dir_names[di], fi + 1))
+            })
+        });
         Self {
-            robbo:        sp("robbo"),
+            player,
             screw:        sp("screw"),
             capsule:      sp("capsule"),
             bomb:         sp("bomb"),
@@ -78,7 +93,8 @@ impl SpriteAssets {
     pub fn for_element(&self, kind: &ElementKind, dir: Direction) -> Handle<Image> {
         let dir_idx = dir_to_idx(dir);
         match kind {
-            ElementKind::Robbo             => self.robbo.clone(),
+            // Initial spawn image — update_robbo_sprite refreshes this every frame.
+            ElementKind::Robbo             => self.player[dir_idx][0].clone(),
             ElementKind::Screw             => self.screw.clone(),
             ElementKind::Capsule           => self.capsule.clone(),
             ElementKind::Bomb              => self.bomb.clone(),

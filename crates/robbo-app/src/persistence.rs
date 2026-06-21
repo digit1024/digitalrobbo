@@ -30,15 +30,33 @@ pub struct LevelProgress {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SettingsData {
     pub master_volume: f32,
+    pub music_volume: f32,
+    pub sfx_volume: f32,
+    #[serde(default = "default_stored_music")]
+    pub stored_music_volume: f32,
+    #[serde(default = "default_stored_sfx")]
+    pub stored_sfx_volume: f32,
     pub colourblind_mode: bool,
     pub show_grid: bool,
     pub skin: String,
+}
+
+fn default_stored_music() -> f32 {
+    0.5
+}
+
+fn default_stored_sfx() -> f32 {
+    1.0
 }
 
 impl Default for SettingsData {
     fn default() -> Self {
         Self {
             master_volume: 0.8,
+            music_volume: 0.5,
+            sfx_volume: 1.0,
+            stored_music_volume: 0.5,
+            stored_sfx_volume: 1.0,
             colourblind_mode: false,
             show_grid: false,
             skin: "default".into(),
@@ -96,6 +114,9 @@ impl SaveStorage for WebSaveStorage {
         false
     }
 }
+
+#[derive(Resource)]
+pub struct GameFont(pub Handle<Font>);
 
 #[derive(Resource)]
 pub struct GameSave(pub SaveData);

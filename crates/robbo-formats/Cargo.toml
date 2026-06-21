@@ -8,6 +8,7 @@ authors.workspace = true
 
 [dependencies]
 robbo-core = { path = "../robbo-core" }
+sha2 = "0.10"
 thiserror = { workspace = true }
 
 [dev-dependencies]

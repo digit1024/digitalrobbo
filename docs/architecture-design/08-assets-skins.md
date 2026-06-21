@@ -1,7 +1,7 @@
 # 08 — Assets and Skins
 
-> **Status:** Draft  
-> **Last updated:** M-DOC
+> **Status:** Implemented  
+> **Last updated:** 2026-06-21
 
 ## Goals
 
@@ -13,6 +13,15 @@
 
 ```
 assets/
+├── audio/
+│   ├── manifest.ron
+│   ├── music/          # BGM pool (Kevin MacLeod, CC BY 3.0)
+│   └── sfx/            # one-shot effects
+├── fonts/
+│   └── MarkerFelt.ttf
+├── ui/                 # menu backgrounds and icons
+├── sprites/            # gameplay sprites
+├── levels/             # .dat packs
 └── skins/
     └── default/
         ├── skin.ron
@@ -20,6 +29,27 @@ assets/
         ├── entities.png
         └── ui.png
 ```
+
+## Audio manifest (`assets/audio/manifest.ron`)
+
+```ron
+(
+    menu_music: "audio/music/super_friendly.ogg",
+    level_music: [
+        "audio/music/chipper_doodle_v2.ogg",
+        // ... pool; track picked by level_content_seed(level)
+    ],
+    sfx: {
+        "walk": "audio/sfx/walk.ogg",
+        "collected_screw": "audio/sfx/screw.ogg",
+        // ...
+    },
+)
+```
+
+Level BGM index = `level_content_seed(level) % level_music.len()` (`robbo-formats/level_hash.rs`).
+
+Fetch script: `scripts/fetch_digit_assets.sh` (DigitAdventures source). Attribution: `assets/AUDIO_ATTRIBUTION.md`.
 
 ## Skin manifest schema (RON)
 
