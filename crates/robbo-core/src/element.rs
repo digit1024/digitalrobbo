@@ -177,3 +177,35 @@ pub fn next_rand(state: &mut u64) -> u32 {
 pub fn roll_one_in_eight(rng: &mut u64) -> bool {
     next_rand(rng) & 7 == 0
 }
+
+/// GNU Robbo default game loop (`DEFAULT_GAME_CYCLE_LIMIT` in gnurobbo `game.h`).
+pub const GNUROBBO_CYCLE_HZ: u32 = 25;
+/// Must match `robbo-app::bridge::TICK_SECS` (0.1 s → 10 Hz).
+pub const SIM_TICK_HZ: u32 = 10;
+
+/// Convert gnurobbo `DELAY_*` cycle counts to DigitalRobbo sim ticks.
+pub const fn gnurobbo_delay_to_ticks(delay_cycles: u32) -> u32 {
+    let ticks = (delay_cycles * SIM_TICK_HZ + GNUROBBO_CYCLE_HZ / 2) / GNUROBBO_CYCLE_HZ;
+    if ticks == 0 { 1 } else { ticks }
+}
+
+pub fn enemy_move_delay(kind: &ElementKind) -> u32 {
+    let gnu_cycles = match kind {
+        ElementKind::Bear { .. } | ElementKind::BlackBear { .. } => 4,
+        ElementKind::Bird { .. } => 4,
+        ElementKind::Butterfly => 4,
+        _ => return 1,
+    };
+    gnurobbo_delay_to_ticks(gnu_cycles)
+}
+
+#[cfg(test)]
+mod timing_tests {
+    use super::*;
+
+    #[test]
+    fn gnurobbo_delay_four_maps_to_two_sim_ticks() {
+        assert_eq!(gnurobbo_delay_to_ticks(4), 2);
+        assert_eq!(enemy_move_delay(&ElementKind::Bear { clockwise: false }), 2);
+    }
+}

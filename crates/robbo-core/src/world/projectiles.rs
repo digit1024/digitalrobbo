@@ -1,131 +1,10 @@
 use crate::cell::Cell;
 use crate::direction::Direction;
-use crate::element::{ElementKind, GunType};
-use crate::events::{DeathCause, GameEvent};
-use crate::tile::TileKind;
+use crate::element::ElementKind;
+use crate::events::GameEvent;
 use crate::world::World;
 
-pub(crate) enum ProjectileHitAction {
-    RemoveProjectile(u32),
-    Remove(u32),
-    RemovePair(u32, u32),
-    KillRobbo,
-    Explode(Cell),
-    DestroyAt(Cell),
-    ClearGround(Cell),
-}
-
 impl World {
-    /// Resolve what happens when a player/enemy shot reaches `at`.
-    /// Returns `None` when the cell is empty and the projectile should keep flying.
-    pub(crate) fn resolve_projectile_hit(
-        &self,
-        at: Cell,
-        from_player: bool,
-        projectile_id: u32,
-    ) -> Option<Vec<ProjectileHitAction>> {
-        if let Some((_, target)) = self.element_at(at) {
-            let target_id = target.id;
-            let actions = match &target.kind {
-                ElementKind::Robbo if !from_player => {
-                    vec![
-                        ProjectileHitAction::KillRobbo,
-                        ProjectileHitAction::RemoveProjectile(projectile_id),
-                    ]
-                }
-                ElementKind::Box | ElementKind::PushBox => {
-                    vec![ProjectileHitAction::RemovePair(projectile_id, target_id)]
-                }
-                ElementKind::Bomb => {
-                    vec![
-                        ProjectileHitAction::RemovePair(projectile_id, target_id),
-                        ProjectileHitAction::Explode(at),
-                    ]
-                }
-                ElementKind::QuestionMark { .. } => {
-                    vec![
-                        ProjectileHitAction::RemoveProjectile(projectile_id),
-                        ProjectileHitAction::DestroyAt(at),
-                    ]
-                }
-                _ if self.tile_at(at) == Some(TileKind::Ground) => {
-                    vec![
-                        ProjectileHitAction::RemoveProjectile(projectile_id),
-                        ProjectileHitAction::DestroyAt(at),
-                    ]
-                }
-                ElementKind::Bear { .. }
-                | ElementKind::BlackBear { .. }
-                | ElementKind::Bird { .. }
-                | ElementKind::Butterfly => {
-                    vec![
-                        ProjectileHitAction::RemoveProjectile(projectile_id),
-                        ProjectileHitAction::Remove(target_id),
-                    ]
-                }
-                ElementKind::Screw | ElementKind::Capsule => {
-                    vec![
-                        ProjectileHitAction::RemoveProjectile(projectile_id),
-                        ProjectileHitAction::Remove(target_id),
-                    ]
-                }
-                ElementKind::Key | ElementKind::BulletPickup => {
-                    vec![
-                        ProjectileHitAction::RemoveProjectile(projectile_id),
-                        ProjectileHitAction::Remove(target_id),
-                    ]
-                }
-                ElementKind::BarbedWire | ElementKind::Stop => {
-                    vec![
-                        ProjectileHitAction::RemoveProjectile(projectile_id),
-                        ProjectileHitAction::Remove(target_id),
-                    ]
-                }
-                ElementKind::Gun { .. }
-                | ElementKind::Magnet { .. }
-                | ElementKind::Teleport { .. }
-                | ElementKind::Laser { .. } => {
-                    vec![ProjectileHitAction::RemoveProjectile(projectile_id)]
-                }
-                _ => vec![ProjectileHitAction::RemoveProjectile(projectile_id)],
-            };
-            return Some(actions);
-        }
-
-        if self.tile_at(at) == Some(TileKind::Ground) {
-            return Some(vec![
-                ProjectileHitAction::RemoveProjectile(projectile_id),
-                ProjectileHitAction::ClearGround(at),
-            ]);
-        }
-
-        None
-    }
-
-    pub(crate) fn apply_projectile_hit_actions(
-        &mut self,
-        actions: &[ProjectileHitAction],
-        events: &mut Vec<GameEvent>,
-    ) {
-        for action in actions {
-            match *action {
-                ProjectileHitAction::RemoveProjectile(id) | ProjectileHitAction::Remove(id) => {
-                    self.remove_element_by_id(id);
-                }
-                ProjectileHitAction::RemovePair(a, b) => {
-                    self.remove_element_by_id(a);
-                    self.remove_element_by_id(b);
-                }
-                ProjectileHitAction::KillRobbo => self.kill_robbo(DeathCause::Projectile, events),
-                ProjectileHitAction::Explode(at) => self.explode_at(at, events),
-                ProjectileHitAction::DestroyAt(at) => self.destroy_at(at, events),
-                ProjectileHitAction::ClearGround(at) => {
-                    self.clear_ground_tile(at, events);
-                }
-            }
-        }
-    }
-
     pub(crate) fn tick_projectiles(&mut self, _events: &mut Vec<GameEvent>) {
         // Player/enemy bolts are ElementKind::Laser; nothing to tick here.
     }
@@ -165,6 +44,6 @@ impl World {
     }
 
     pub(crate) fn shoot_from_cell(&mut self, from: Cell, dir: Direction, events: &mut Vec<GameEvent>) {
-        self.gun_shoot(from, dir, GunType::Regular, None, events);
+        self.gun_shoot(from, dir, crate::element::GunType::Regular, None, events, true);
     }
 }

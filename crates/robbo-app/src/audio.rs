@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use bevy::audio::{AudioPlayer, PlaybackSettings, Volume};
 use bevy::prelude::*;
-use robbo_core::{ElementKind, GameEvent};
+use robbo_core::{Cell, ElementKind, GameEvent};
 use serde::Deserialize;
 
 use crate::app_state::AppState;
@@ -12,6 +12,28 @@ use crate::persistence::{GameSave, persist_save};
 use crate::ui::LevelCountdown;
 
 const MANIFEST_STR: &str = include_str!("../../../assets/audio/manifest.ron");
+
+/// Grid squares at or inside this range play at full SFX volume.
+const SFX_FULL_RANGE: i16 = 4;
+/// Grid squares at or beyond this range are silent.
+const SFX_SILENT_RANGE: i16 = 12;
+
+/// Chebyshev distance — how many orthogonal steps cover both axes (king moves on a grid).
+fn grid_distance(a: Cell, b: Cell) -> i16 {
+    (a.col - b.col).abs().max((a.row - b.row).abs())
+}
+
+/// Linear falloff between [`SFX_FULL_RANGE`] and [`SFX_SILENT_RANGE`].
+fn distance_attenuation(distance: i16) -> f32 {
+    if distance <= SFX_FULL_RANGE {
+        1.0
+    } else if distance >= SFX_SILENT_RANGE {
+        0.0
+    } else {
+        let span = (SFX_SILENT_RANGE - SFX_FULL_RANGE) as f32;
+        1.0 - (distance - SFX_FULL_RANGE) as f32 / span
+    }
+}
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct AudioManifestData {
@@ -254,11 +276,21 @@ pub fn play_sfx(
     audio: &GameAudio,
     save: &GameSave,
     key: &str,
+    source: Option<Cell>,
+    listener: Option<Cell>,
 ) {
     let vol = effective_sfx_volume(save);
     if vol <= 0.001 {
         return;
     }
+    let attenuation = match (source, listener) {
+        (Some(src), Some(ear)) => distance_attenuation(grid_distance(src, ear)),
+        _ => 1.0,
+    };
+    if attenuation <= 0.001 {
+        return;
+    }
+    let vol = vol * attenuation;
     let Some(handle) = audio.sfx.get(key) else {
         return;
     };
@@ -275,30 +307,31 @@ pub fn sfx_on_core_events(
     audio: Res<GameAudio>,
     save: Res<GameSave>,
 ) {
+    let listener = bridge.world.robbo_cell();
     for CoreGameEvent(event) in reader.read() {
-        let key = match event {
-            GameEvent::Moved { entity_id, .. } if *entity_id == bridge.world.robbo_id => {
-                Some("walk")
+        let mapped = match event {
+            GameEvent::Moved { entity_id, to, .. } if *entity_id == bridge.world.robbo_id => {
+                Some(("walk", Some(*to)))
             }
-            GameEvent::Shot { .. } => Some("shoot"),
-            GameEvent::Collected { kind, .. } => match kind {
-                ElementKind::Screw => Some("collected_screw"),
-                ElementKind::Key => Some("collected_key"),
-                ElementKind::BulletPickup => Some("collected_ammo"),
+            GameEvent::Shot { from, .. } => Some(("shoot", Some(*from))),
+            GameEvent::Collected { kind, at } => match kind {
+                ElementKind::Screw => Some(("collected_screw", Some(*at))),
+                ElementKind::Key => Some(("collected_key", Some(*at))),
+                ElementKind::BulletPickup => Some(("collected_ammo", Some(*at))),
                 _ => None,
             },
-            GameEvent::Exploded { .. } => Some("explosion"),
-            GameEvent::Revealed { .. } => Some("explosion"),
-            GameEvent::DoorOpened { .. } => Some("door"),
-            GameEvent::Teleported { .. } => Some("teleport"),
+            GameEvent::Exploded { at } => Some(("explosion", Some(*at))),
+            GameEvent::Revealed { at } => Some(("explosion", Some(*at))),
+            GameEvent::DoorOpened { at } => Some(("door", Some(*at))),
+            GameEvent::Teleported { to, .. } => Some(("teleport", Some(*to))),
             GameEvent::Died { entity_id, .. } if *entity_id == bridge.world.robbo_id => {
-                Some("death")
+                Some(("death", listener))
             }
-            GameEvent::LevelComplete => Some("level_complete"),
+            GameEvent::LevelComplete => Some(("level_complete", None)),
             _ => None,
         };
-        if let Some(k) = key {
-            play_sfx(&mut commands, &audio, &save, k);
+        if let Some((key, source)) = mapped {
+            play_sfx(&mut commands, &audio, &save, key, source, listener);
         }
     }
 }
@@ -326,5 +359,35 @@ pub fn play_countdown_tick(
     audio: &GameAudio,
     save: &GameSave,
 ) {
-    play_sfx(commands, audio, save, "countdown");
+    play_sfx(commands, audio, save, "countdown", None, None);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use robbo_core::Cell;
+
+    #[test]
+    fn attenuation_full_inside_range() {
+        assert_eq!(distance_attenuation(0), 1.0);
+        assert_eq!(distance_attenuation(4), 1.0);
+    }
+
+    #[test]
+    fn attenuation_silent_outside_range() {
+        assert_eq!(distance_attenuation(12), 0.0);
+        assert_eq!(distance_attenuation(20), 0.0);
+    }
+
+    #[test]
+    fn attenuation_linear_mid_range() {
+        assert!((distance_attenuation(8) - 0.5).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn grid_distance_uses_chebyshev() {
+        let a = Cell::new(0, 0);
+        let b = Cell::new(3, 5);
+        assert_eq!(grid_distance(a, b), 5);
+    }
 }

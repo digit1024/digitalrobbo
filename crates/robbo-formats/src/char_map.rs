@@ -69,7 +69,13 @@ pub fn char_to_element(c: char) -> FormatResult<Option<(ElementKind, Direction)>
         },
         _ => return Ok(None),
     };
-    Ok(Some((el, Direction::Down)))
+    let direction = match &el {
+        ElementKind::Bear { .. } | ElementKind::BlackBear { .. } | ElementKind::Bird { .. } => {
+            Direction::Right
+        }
+        _ => Direction::Down,
+    };
+    Ok(Some((el, direction)))
 }
 
 pub fn tile_or_element(c: char) -> FormatResult<(TileKind, Option<ElementState>)> {
@@ -194,9 +200,7 @@ pub fn apply_additional_line(elements: &mut [(Cell, ElementState)], line: &str) 
                 dir
             };
             let shooting = parts.len() >= 6 && parts[5] == "1";
-            let variant = if shooting {
-                robbo_core::BirdVariant::Firing
-            } else if dir == Direction::Up || dir == Direction::Down {
+            let variant = if dir == Direction::Up || dir == Direction::Down {
                 robbo_core::BirdVariant::Vertical
             } else {
                 robbo_core::BirdVariant::Horizontal

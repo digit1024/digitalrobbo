@@ -1,6 +1,6 @@
 use crate::cell::Cell;
 use crate::direction::Direction;
-use crate::element::{BirdVariant, ElementKind, ElementState, GunType, roll_one_in_eight};
+use crate::element::{ElementKind, ElementState, GunType, roll_one_in_eight};
 use crate::events::{DeathCause, GameEvent};
 use crate::world::World;
 
@@ -34,11 +34,11 @@ impl World {
         for (cell, state) in snapshot.iter() {
             let id = state.id;
             let tick_counter = state.tick_counter + 1;
-            let delay = match state.kind {
-                ElementKind::Bear { .. } => 4,
-                ElementKind::BlackBear { .. } => 2,
-                ElementKind::Bird { .. } => 3,
-                ElementKind::Butterfly => 2,
+            let delay = match &state.kind {
+                ElementKind::Bear { .. }
+                | ElementKind::BlackBear { .. }
+                | ElementKind::Bird { .. }
+                | ElementKind::Butterfly => crate::element::enemy_move_delay(&state.kind),
                 _ => {
                     updates.push((id, tick_counter, state.direction, None));
                     continue;
@@ -51,45 +51,22 @@ impl World {
 
             let mut direction = state.direction;
             let new_cell = match &state.kind {
-                ElementKind::Bear { .. } => {
+                ElementKind::Bear { clockwise }
+                | ElementKind::BlackBear { clockwise } => {
                     let (next, new_dir) =
-                        self.bear_step(*cell, direction, false, self.sensible_bears);
+                        self.bear_step(*cell, direction, *clockwise, self.sensible_bears);
                     direction = new_dir;
                     next
                 }
-                ElementKind::BlackBear { .. } => {
-                    let (next, new_dir) =
-                        self.bear_step(*cell, direction, true, self.sensible_bears);
-                    direction = new_dir;
-                    next
-                }
-                ElementKind::Bird { variant, shooting } => {
-                    let mut pos = *cell;
-                    match variant {
-                        BirdVariant::Horizontal => {
-                            let (dc, _) = direction.delta();
-                            let next = cell.offset(dc, 0);
-                            if self.is_blocked_for_enemy(next) {
-                                direction = direction.opposite();
-                                let (dc, _) = direction.delta();
-                                pos = cell.offset(dc, 0);
-                            } else {
-                                pos = next;
-                            }
-                        }
-                        BirdVariant::Vertical => {
-                            let (_, dr) = direction.delta();
-                            let next = cell.offset(0, dr);
-                            if self.is_blocked_for_enemy(next) {
-                                direction = direction.opposite();
-                                let (_, dr) = direction.delta();
-                                pos = cell.offset(0, dr);
-                            } else {
-                                pos = next;
-                            }
-                        }
-                        BirdVariant::Firing => {}
-                    }
+                ElementKind::Bird { shooting, .. } => {
+                    let (dc, dr) = direction.delta();
+                    let next = cell.offset(dc, dr);
+                    let pos = if !self.is_blocked_for_enemy(next) {
+                        next
+                    } else {
+                        direction = direction.opposite();
+                        *cell
+                    };
                     if *shooting && roll_one_in_eight(&mut self.rng_state) {
                         bird_shots.push((pos, state.shot_direction));
                     }
@@ -140,7 +117,7 @@ impl World {
         }
 
         for (from, dir) in bird_shots {
-            self.gun_shoot(from, dir, GunType::Regular, None, events);
+            self.gun_shoot(from, dir, GunType::Regular, None, events, true);
         }
     }
 

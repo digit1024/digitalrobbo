@@ -173,6 +173,32 @@ impl World {
         });
     }
 
+    /// Clear ground / barrier / door tiles removed by shots or bombs.
+    pub(crate) fn clear_blowable_tile(&mut self, cell: Cell, events: &mut Vec<GameEvent>) {
+        let Some(tile) = self.tile_at(cell) else {
+            return;
+        };
+        match tile {
+            TileKind::Ground => self.clear_ground_tile(cell, events),
+            TileKind::Barrier => {
+                self.set_tile(cell, TileKind::Empty);
+                self.barrier_directions.remove(&cell);
+                events.push(GameEvent::TileCleared {
+                    at: cell,
+                    kind: TileKind::Barrier,
+                });
+            }
+            TileKind::DoorClosed => {
+                self.set_tile(cell, TileKind::Empty);
+                events.push(GameEvent::TileCleared {
+                    at: cell,
+                    kind: TileKind::DoorClosed,
+                });
+            }
+            _ => {}
+        }
+    }
+
     pub fn element_at(&self, cell: Cell) -> Option<(usize, &ElementState)> {
         self.elements
             .iter()
@@ -436,30 +462,72 @@ impl World {
                     self.remove_element_by_id(id);
                     self.explode_at(cell, events);
                 }
-                _ if self.tile_at(cell) == Some(TileKind::Ground) => {
-                    self.clear_ground_tile(cell, events);
-                }
-                ElementKind::Screw => {
-                    self.remove_element_by_id(id);
-                }
-                ElementKind::Box | ElementKind::PushBox => {
-                    self.remove_element_by_id(id);
-                }
-                ElementKind::Bear { .. }
-                | ElementKind::BlackBear { .. }
-                | ElementKind::Bird { .. }
-                | ElementKind::Butterfly => {
-                    self.remove_element_by_id(id);
-                }
-                ElementKind::BarbedWire | ElementKind::Stop => {
-                    self.remove_element_by_id(id);
-                }
-                ElementKind::Capsule | ElementKind::Key | ElementKind::BulletPickup => {
+                k if Self::is_shot_destroyable(&k) => {
                     self.remove_element_by_id(id);
                 }
                 _ => {}
             }
+            return;
         }
+        if self
+            .tile_at(cell)
+            .is_some_and(Self::is_tile_shot_destroyable)
+        {
+            self.clear_blowable_tile(cell, events);
+        }
+    }
+
+    /// gnurobbo `destroyable` — removed by laser bolt / direct shot.
+    pub(crate) fn is_shot_destroyable(kind: &ElementKind) -> bool {
+        matches!(
+            kind,
+            ElementKind::Bomb
+                | ElementKind::QuestionMark { .. }
+                | ElementKind::BulletPickup
+                | ElementKind::Bear { .. }
+                | ElementKind::BlackBear { .. }
+                | ElementKind::Bird { .. }
+                | ElementKind::Butterfly
+        )
+    }
+
+    pub(crate) fn is_tile_shot_destroyable(tile: TileKind) -> bool {
+        matches!(tile, TileKind::Ground | TileKind::Barrier)
+    }
+
+    /// gnurobbo `blowable` — removed in a 3×3 bomb blast (question marks do not reveal).
+    pub(crate) fn is_blowable(kind: &ElementKind) -> bool {
+        matches!(
+            kind,
+            ElementKind::Box
+                | ElementKind::PushBox
+                | ElementKind::Screw
+                | ElementKind::Key
+                | ElementKind::Capsule
+                | ElementKind::BulletPickup
+                | ElementKind::Bomb
+                | ElementKind::QuestionMark { .. }
+                | ElementKind::Bear { .. }
+                | ElementKind::BlackBear { .. }
+                | ElementKind::Bird { .. }
+                | ElementKind::Butterfly
+                | ElementKind::BarbedWire
+                | ElementKind::Stop
+                | ElementKind::Gun { .. }
+                | ElementKind::Magnet { .. }
+                | ElementKind::Teleport { .. }
+                | ElementKind::Laser {
+                    solid: false, ..
+                }
+                | ElementKind::BlasterCell { .. }
+        )
+    }
+
+    pub(crate) fn is_tile_blowable(tile: TileKind) -> bool {
+        matches!(
+            tile,
+            TileKind::Ground | TileKind::Barrier | TileKind::DoorClosed
+        )
     }
 
     /// Objects that block `shoot_object` from placing a new laser segment.
@@ -481,21 +549,9 @@ impl World {
         )
     }
 
-    /// Objects destroyed by laser bolt / gun shot (gnurobbo `destroyable`).
+    /// Alias for moving-laser collision (element kinds only).
     pub(crate) fn is_laser_destroyable(kind: &ElementKind) -> bool {
-        matches!(
-            kind,
-            ElementKind::Box
-                | ElementKind::PushBox
-                | ElementKind::Bomb
-                | ElementKind::QuestionMark { .. }
-                | ElementKind::Bear { .. }
-                | ElementKind::BlackBear { .. }
-                | ElementKind::Bird { .. }
-                | ElementKind::Butterfly
-                | ElementKind::BarbedWire
-                | ElementKind::Stop
-        )
+        Self::is_shot_destroyable(kind)
     }
 
     pub(crate) fn is_blaster_immune(kind: &ElementKind) -> bool {

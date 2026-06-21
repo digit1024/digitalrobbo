@@ -7,7 +7,7 @@ use crate::app_state::AppState;
 use crate::input::SteeringState;
 use crate::ui::LevelCountdown;
 
-pub const TICK_SECS: f32 = 0.1; // ~7 ticks/s — enemies/guns advance at this rate
+pub const TICK_SECS: f32 = 0.1; // 10 Hz sim — enemy delays scaled from GNU 25 Hz
 /// Visual step length — always equals one sim tick (Robbo, enemies, bullets, pushed boxes).
 pub const ANIM_SECS: f32 = TICK_SECS;
 

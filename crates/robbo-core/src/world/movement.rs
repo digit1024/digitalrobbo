@@ -277,23 +277,35 @@ impl World {
             return;
         };
         let (dc, dr) = dir.delta();
-        let spawn = from.offset(dc, dr);
-        if !self.in_bounds(spawn) {
-            return;
-        }
-        if self.tile_at(spawn).is_some_and(|t| t.blocks_shot()) {
+        let target = from.offset(dc, dr);
+
+        if !self.in_bounds(target) {
+            self.ammo -= 1;
+            events.push(GameEvent::Shot { from, direction: dir });
             return;
         }
 
         self.ammo -= 1;
+        events.push(GameEvent::Shot { from, direction: dir });
 
-        let proj_id = self.allocate_id();
-        if let Some(hit) = self.resolve_projectile_hit(spawn, true, proj_id) {
-            events.push(GameEvent::Shot { from, direction: dir });
-            self.apply_projectile_hit_actions(&hit, events);
+        if self.tile_at(target).is_some_and(|t| t.blocks_shot()) {
             return;
         }
 
-        self.gun_shoot(from, dir, GunType::Regular, None, events);
+        if let Some((_, el)) = self.element_at(target) {
+            if Self::is_shot_destroyable(&el.kind) {
+                self.destroy_at(target, events);
+            }
+            return;
+        }
+
+        if self
+            .tile_at(target)
+            .is_some_and(Self::is_tile_shot_destroyable)
+        {
+            self.clear_blowable_tile(target, events);
+        }
+
+        self.gun_shoot(from, dir, GunType::Regular, None, events, false);
     }
 }

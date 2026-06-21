@@ -298,4 +298,32 @@ test
             assert!(!pack.levels.is_empty(), "expected levels in original.dat");
         }
     }
+
+    #[test]
+    fn original_level4_bird_defaults_to_east() {
+        use robbo_core::{BirdVariant, Cell, Direction, ElementKind};
+
+        let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../../assets/levels/original.dat");
+        let bytes = fs::read(path).expect("read original.dat");
+        let pack = parse_pack(&bytes).expect("parse original.dat");
+        let level = pack
+            .levels
+            .iter()
+            .find(|l| l.index == 4)
+            .expect("level 4");
+        let bird = level
+            .elements
+            .iter()
+            .find(|(_, s)| matches!(s.kind, ElementKind::Bird { .. }))
+            .expect("bird on level 4");
+        assert_eq!(bird.0, Cell::new(4, 1));
+        assert_eq!(bird.1.direction, Direction::Right);
+        assert!(matches!(
+            bird.1.kind,
+            ElementKind::Bird {
+                variant: BirdVariant::Horizontal,
+                shooting: false,
+            }
+        ));
+    }
 }

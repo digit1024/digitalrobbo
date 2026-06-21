@@ -47,10 +47,10 @@ Parity reference for GNU Robbo 0.65.6 / Atari Robbo. **Implemented** reflects `r
 
 | Element | Behaviour | Implemented |
 |---------|-----------|-------------|
-| Bear `@` | Wall-following CW/CCW; every 4 ticks | Yes |
-| Black bear `*` | Faster wall-follower | Yes |
-| Bird `^` | Patrol; optional 1/8 shoot per bird tick | Yes |
-| Butterfly `V` | Homing toward Robbo (1/8 random dir) | Yes |
+| Bear `@` | Wall-following CW/CCW; GNU `DELAY_BEAR=4` → every 2 sim ticks (10 Hz) | Yes |
+| Black bear `*` | Right-hand wall-follow (same speed as bear) | Yes |
+| Bird `^` | Patrol along `direction`; GNU `DELAY_BIRD=4` → every 2 sim ticks; optional 1/8 shoot | Yes |
+| Butterfly `V` | Homing toward Robbo; GNU `DELAY_BUTTERFLY=4` → every 2 sim ticks | Yes |
 
 ## Mechanics
 

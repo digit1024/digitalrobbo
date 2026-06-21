@@ -26,36 +26,47 @@ impl World {
             }
         }
 
-        let mut chain_cells = Vec::new();
-        for n in &affected {
-            if self.robbo_cell() == Some(*n) {
+        let mut chain_bombs = Vec::new();
+        for cell in affected.iter().copied().collect::<Vec<_>>() {
+            if self.robbo_cell() == Some(cell) {
                 self.kill_robbo(DeathCause::Explosion, events);
             }
-            if let Some((_, state)) = self.element_at(*n) {
+
+            if let Some((_, state)) = self.element_at(cell) {
+                // Solid laser beams are not blowable (gnurobbo `blow_bomb`).
+                if matches!(
+                    state.kind,
+                    ElementKind::Laser {
+                        solid: true,
+                        ..
+                    }
+                ) {
+                    continue;
+                }
                 if matches!(state.kind, ElementKind::Bomb) {
-                    chain_cells.push(*n);
+                    if !chain_bombs.contains(&cell) {
+                        chain_bombs.push(cell);
+                    }
+                    continue;
+                }
+                if Self::is_blowable(&state.kind) {
+                    self.remove_element_by_id(state.id);
+                }
+            }
+
+            if let Some(tile) = self.tile_at(cell) {
+                if Self::is_tile_blowable(tile) {
+                    self.clear_blowable_tile(cell, events);
                 }
             }
         }
 
-        // Remove destroyable objects; question marks do not reveal on bomb.
-        let to_remove: Vec<u32> = self
-            .elements
-            .iter()
-            .filter(|(c, s)| {
-                affected.contains(c)
-                    && !matches!(
-                        s.kind,
-                        ElementKind::Projectile { .. } | ElementKind::Robbo
-                    )
-            })
-            .map(|(_, s)| s.id)
-            .collect();
-        for id in to_remove {
-            self.remove_element_by_id(id);
-        }
-
-        for cell in chain_cells {
+        for cell in chain_bombs {
+            if let Some((_, state)) = self.element_at(cell) {
+                if matches!(state.kind, ElementKind::Bomb) {
+                    self.remove_element_by_id(state.id);
+                }
+            }
             self.explode_at_inner(cell, events, depth + 1);
         }
     }

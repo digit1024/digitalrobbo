@@ -436,7 +436,7 @@ mod tests {
     }
 
     #[test]
-    fn adjacent_shot_into_solid_wall_no_ammo_spent() {
+    fn shot_into_solid_wall_wastes_ammo() {
         let w = 5u16;
         let h = 3u16;
         let mut tiles = vec![TileKind::Empty; (w * h) as usize];
@@ -446,7 +446,99 @@ mod tests {
         world.ammo = 1;
         world.turn_robbo(Direction::Right);
         world.step(PlayerInput::Shoot(Direction::Right));
-        assert_eq!(world.ammo, 1);
+        assert_eq!(world.ammo, 0);
+    }
+
+    #[test]
+    fn shot_into_box_wastes_ammo_without_destroying() {
+        let w = 5u16;
+        let h = 3u16;
+        let tiles = vec![TileKind::Empty; (w * h) as usize];
+        let elements = vec![
+            (Cell::new(1, 1), robbo_at(Cell::new(1, 1))),
+            (
+                Cell::new(2, 1),
+                ElementState::new(2, ElementKind::Box, Direction::Down),
+            ),
+        ];
+        let mut world = make_world(w, h, tiles, elements, 0);
+        world.ammo = 1;
+        world.turn_robbo(Direction::Right);
+        world.step(PlayerInput::Shoot(Direction::Right));
+        assert_eq!(world.ammo, 0);
+        assert!(world
+            .elements
+            .iter()
+            .any(|(c, s)| *c == Cell::new(2, 1) && matches!(s.kind, ElementKind::Box)));
+        assert!(!world
+            .elements
+            .iter()
+            .any(|(_, s)| matches!(s.kind, ElementKind::Laser { .. })));
+    }
+
+    #[test]
+    fn shot_into_screw_wastes_ammo_without_destroying() {
+        let w = 5u16;
+        let h = 3u16;
+        let tiles = vec![TileKind::Empty; (w * h) as usize];
+        let elements = vec![
+            (Cell::new(1, 1), robbo_at(Cell::new(1, 1))),
+            (
+                Cell::new(2, 1),
+                ElementState::new(2, ElementKind::Screw, Direction::Down),
+            ),
+        ];
+        let mut world = make_world(w, h, tiles, elements, 0);
+        world.ammo = 1;
+        world.turn_robbo(Direction::Right);
+        world.step(PlayerInput::Shoot(Direction::Right));
+        assert_eq!(world.ammo, 0);
+        assert!(world
+            .elements
+            .iter()
+            .any(|(_, s)| matches!(s.kind, ElementKind::Screw)));
+    }
+
+    #[test]
+    fn bomb_blast_removes_box_not_solid_wall() {
+        let w = 6u16;
+        let h = 4u16;
+        let mut tiles = vec![TileKind::Empty; (w * h) as usize];
+        tiles[8] = TileKind::WallSolid; // (2, 1)
+        let elements = vec![
+            (
+                Cell::new(2, 1),
+                ElementState::new(2, ElementKind::Bomb, Direction::Down),
+            ),
+            (
+                Cell::new(3, 1),
+                ElementState::new(3, ElementKind::Box, Direction::Down),
+            ),
+        ];
+        let mut world = make_world(w, h, tiles, elements, 0);
+        let mut events = Vec::new();
+        world.explode_at(Cell::new(2, 1), &mut events);
+        assert!(!world
+            .elements
+            .iter()
+            .any(|(_, s)| matches!(s.kind, ElementKind::Box)));
+        assert_eq!(world.tile_at(Cell::new(2, 1)), Some(TileKind::WallSolid));
+    }
+
+    #[test]
+    fn bomb_blast_clears_barrier_tile() {
+        let w = 5u16;
+        let h = 3u16;
+        let mut tiles = vec![TileKind::Empty; (w * h) as usize];
+        tiles[7] = TileKind::Barrier; // (2, 1)
+        let elements = vec![(
+            Cell::new(2, 1),
+            ElementState::new(2, ElementKind::Bomb, Direction::Down),
+        )];
+        let mut world = make_world(w, h, tiles, elements, 0);
+        let mut events = Vec::new();
+        world.explode_at(Cell::new(2, 1), &mut events);
+        assert_eq!(world.tile_at(Cell::new(2, 1)), Some(TileKind::Empty));
     }
 
     #[test]
@@ -471,7 +563,7 @@ mod tests {
         )];
         let mut world = make_world(w, h, tiles, elements, 0);
         let mut events = Vec::new();
-        world.gun_shoot(Cell::new(2, 1), Direction::Right, GunType::Regular, Some(2), &mut events);
+        world.gun_shoot(Cell::new(2, 1), Direction::Right, GunType::Regular, Some(2), &mut events, true);
         let lasers: Vec<_> = world
             .elements
             .iter()
@@ -503,7 +595,7 @@ mod tests {
         )];
         let mut world = make_world(w, h, tiles, elements, 0);
         let mut events = Vec::new();
-        world.gun_shoot(Cell::new(2, 1), Direction::Right, GunType::Blaster, Some(2), &mut events);
+        world.gun_shoot(Cell::new(2, 1), Direction::Right, GunType::Blaster, Some(2), &mut events, true);
         let blasters: Vec<_> = world
             .elements
             .iter()
@@ -535,7 +627,7 @@ mod tests {
         )];
         let mut world = make_world(w, h, tiles, elements, 0);
         let mut events = Vec::new();
-        world.gun_shoot(Cell::new(2, 1), Direction::Right, GunType::Laser, Some(2), &mut events);
+        world.gun_shoot(Cell::new(2, 1), Direction::Right, GunType::Laser, Some(2), &mut events, true);
         let solid: Vec<_> = world
             .elements
             .iter()
@@ -557,10 +649,9 @@ mod tests {
         )];
         let mut world = make_world(w, h, tiles, elements, 0);
         world.sensible_bears = false;
-        world.step(PlayerInput::Wait);
-        world.step(PlayerInput::Wait);
-        world.step(PlayerInput::Wait);
-        world.step(PlayerInput::Wait);
+        for _ in 0..2 {
+            world.step(PlayerInput::Wait);
+        }
         let bear_cell = world
             .elements
             .iter()
@@ -591,7 +682,7 @@ mod tests {
         )];
         let mut world = make_world(w, h, tiles, elements, 0);
         let mut events = Vec::new();
-        world.gun_shoot(Cell::new(2, 1), Direction::Right, GunType::Laser, Some(2), &mut events);
+        world.gun_shoot(Cell::new(2, 1), Direction::Right, GunType::Laser, Some(2), &mut events, true);
         for _ in 0..8 {
             world.step(PlayerInput::Wait);
         }
@@ -609,7 +700,7 @@ mod tests {
         tiles[9] = TileKind::Ground; // (3, 1)
         let mut world = make_world(w, h, tiles, vec![], 0);
         let mut events = Vec::new();
-        world.gun_shoot(Cell::new(2, 1), Direction::Right, GunType::Laser, None, &mut events);
+        world.gun_shoot(Cell::new(2, 1), Direction::Right, GunType::Laser, None, &mut events, true);
         assert_eq!(world.tile_at(Cell::new(3, 1)), Some(TileKind::Empty));
         assert!(world.elements.iter().any(|(c, s)| {
             *c == Cell::new(3, 1) && matches!(s.kind, ElementKind::Laser { solid: true, .. })
@@ -639,8 +730,8 @@ mod tests {
         )];
         let mut world = make_world(w, h, tiles, elements, 0);
         let mut events = Vec::new();
-        world.gun_shoot(Cell::new(2, 1), Direction::Right, GunType::Laser, Some(2), &mut events);
-        for _ in 0..8 {
+        world.gun_shoot(Cell::new(2, 1), Direction::Right, GunType::Laser, Some(2), &mut events, true);
+        for _ in 0..2 {
             world.step(PlayerInput::Wait);
         }
         assert!(!world.elements.iter().any(|(c, _)| *c == Cell::new(5, 1)));
@@ -673,8 +764,8 @@ mod tests {
         )];
         let mut world = make_world(w, h, tiles, elements, 0);
         let mut events = Vec::new();
-        world.gun_shoot(Cell::new(2, 1), Direction::Right, GunType::Laser, Some(2), &mut events);
-        for _ in 0..8 {
+        world.gun_shoot(Cell::new(2, 1), Direction::Right, GunType::Laser, Some(2), &mut events, true);
+        for _ in 0..2 {
             world.step(PlayerInput::Wait);
         }
         assert!(world
@@ -687,10 +778,10 @@ mod tests {
         assert!(!world.elements.iter().any(|(c, s)| {
             *c == Cell::new(4, 1) && matches!(s.kind, ElementKind::Laser { solid: true, .. })
         }));
-        assert!(world
+        assert!(!world
             .elements
             .iter()
-            .any(|(c, s)| *c == Cell::new(3, 1) && matches!(s.kind, ElementKind::Laser { solid: true, .. })));
+            .any(|(c, s)| matches!(s.kind, ElementKind::Laser { solid: true, .. })));
     }
 
     #[test]
@@ -819,5 +910,64 @@ mod tests {
             world.step(PlayerInput::Wait);
         }
         assert_eq!(world.status, LevelStatus::Failed);
+    }
+
+    #[test]
+    fn bird_patrols_along_direction_reverses_on_wall() {
+        let w = 8u16;
+        let h = 4u16;
+        let tiles = vec![TileKind::Empty; (w * h) as usize];
+        let elements = vec![(
+            Cell::new(3, 1),
+            ElementState::new(
+                2,
+                ElementKind::Bird {
+                    variant: crate::element::BirdVariant::Horizontal,
+                    shooting: false,
+                },
+                Direction::Right,
+            ),
+        )];
+        let mut world = make_world(w, h, tiles, elements, 0);
+        for _ in 0..2 {
+            world.step(PlayerInput::Wait);
+        }
+        assert_eq!(
+            world
+                .elements
+                .iter()
+                .find(|(_, s)| matches!(s.kind, ElementKind::Bird { .. }))
+                .map(|(c, _)| *c),
+            Some(Cell::new(4, 1))
+        );
+    }
+
+    #[test]
+    fn bird_with_shooting_still_patrols() {
+        let w = 8u16;
+        let h = 4u16;
+        let tiles = vec![TileKind::Empty; (w * h) as usize];
+        let mut bird = ElementState::new(
+            2,
+            ElementKind::Bird {
+                variant: crate::element::BirdVariant::Horizontal,
+                shooting: true,
+            },
+            Direction::Right,
+        );
+        bird.shot_direction = Direction::Down;
+        let elements = vec![(Cell::new(2, 1), bird)];
+        let mut world = make_world(w, h, tiles, elements, 0);
+        for _ in 0..2 {
+            world.step(PlayerInput::Wait);
+        }
+        assert_eq!(
+            world
+                .elements
+                .iter()
+                .find(|(_, s)| matches!(s.kind, ElementKind::Bird { .. }))
+                .map(|(c, _)| *c),
+            Some(Cell::new(3, 1))
+        );
     }
 }

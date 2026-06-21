@@ -1,5 +1,5 @@
 use bevy::prelude::*;
-use robbo_core::{Cell, ElementKind, ElementState};
+use robbo_core::{Cell, ElementKind, ElementState, enemy_move_delay};
 
 use crate::bridge::{CoreBridge, GameTickTimer, TICK_SECS};
 use crate::projection::ActiveProjection;
@@ -67,15 +67,15 @@ impl VisualMotion {
 /// Sim ticks between moves for each element — must mirror robbo-core cadence.
 pub fn visual_step_ticks(kind: &ElementKind, state: &ElementState) -> u32 {
     match kind {
-        ElementKind::Bear { .. } => 4,
-        ElementKind::BlackBear { .. } => 2,
-        ElementKind::Bird { .. } => 3,
-        ElementKind::Butterfly => 2,
+        ElementKind::Bear { .. } | ElementKind::BlackBear { .. } | ElementKind::Bird { .. } => {
+            enemy_move_delay(kind)
+        }
+        ElementKind::Butterfly => enemy_move_delay(kind),
         ElementKind::PushBox if state.sliding => 4,
         ElementKind::Gun { movable: true, .. } => 8,
-        // Gun regular/laser bolts (`place_laser_segment` solid:false) — `tick_lasers_and_blasters` every 4 ticks.
-        ElementKind::Laser { solid: false, .. } => 4,
-        // Robbo / bird / push-box shots use `Projectile` + `tick_projectiles` every tick.
+        // Regular / gun bolts — one cell per sim tick (Robbo also steps every tick).
+        ElementKind::Laser { solid: false, .. } => 1,
+        // Robbo / bird / push-box shots use `Laser` + `tick_lasers_and_blasters` every tick.
         ElementKind::Projectile { .. } => 1,
         _ => 1,
     }

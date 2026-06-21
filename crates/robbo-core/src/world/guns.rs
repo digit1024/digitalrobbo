@@ -94,7 +94,7 @@ impl World {
                 })
                 .unwrap_or(direction);
 
-            self.gun_shoot(from, shoot_dir, gun_type, Some(id), events);
+            self.gun_shoot(from, shoot_dir, gun_type, Some(id), events, true);
         }
     }
 

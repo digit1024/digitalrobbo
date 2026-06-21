@@ -58,6 +58,7 @@ impl World {
         gun_type: GunType,
         source_id: Option<u32>,
         events: &mut Vec<GameEvent>,
+        emit_shot: bool,
     ) {
         let (dc, dr) = direction.delta();
         let target = from.offset(dc, dr);
@@ -101,8 +102,12 @@ impl World {
             return;
         }
 
-        if self.tile_at(target) == Some(TileKind::Ground) {
-            self.clear_ground_tile(target, events);
+        if self.tile_at(target) == Some(TileKind::Ground)
+            || self
+                .tile_at(target)
+                .is_some_and(|t| t == TileKind::Barrier)
+        {
+            self.clear_blowable_tile(target, events);
         }
 
         match gun_type {
@@ -110,15 +115,12 @@ impl World {
             GunType::Laser => self.place_laser_segment(target, direction, true, source_id),
             GunType::Regular => self.place_laser_segment(target, direction, false, source_id),
         }
-        events.push(GameEvent::Shot { from, direction });
+        if emit_shot {
+            events.push(GameEvent::Shot { from, direction });
+        }
     }
 
     pub(crate) fn tick_lasers_and_blasters(&mut self, events: &mut Vec<GameEvent>) {
-        if self.tick % 4 != 0 {
-            self.laser_contact_damage(events);
-            return;
-        }
-
         self.tick_moving_lasers(events);
         self.tick_solid_lasers(events);
         self.tick_blaster_cells(events);
@@ -169,8 +171,12 @@ impl World {
                 self.remove_element_by_id(id);
                 continue;
             }
-            if self.tile_at(next) == Some(TileKind::Ground) {
-                self.clear_ground_tile(next, events);
+            if self.tile_at(next) == Some(TileKind::Ground)
+                || self
+                    .tile_at(next)
+                    .is_some_and(|t| t == TileKind::Barrier)
+            {
+                self.clear_blowable_tile(next, events);
                 self.remove_element_by_id(id);
                 continue;
             }
@@ -270,8 +276,12 @@ impl World {
                 continue;
             }
 
-            if self.tile_at(next) == Some(TileKind::Ground) {
-                self.clear_ground_tile(next, events);
+            if self.tile_at(next) == Some(TileKind::Ground)
+                || self
+                    .tile_at(next)
+                    .is_some_and(|t| t == TileKind::Barrier)
+            {
+                self.clear_blowable_tile(next, events);
             }
 
             self.place_laser_segment(next, direction, true, source_id);
