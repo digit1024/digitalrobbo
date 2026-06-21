@@ -29,6 +29,7 @@ pub fn sync_visuals(
     mut entity_map: ResMut<EntityMap>,
     mut commands: Commands,
     mut motion_q: Query<(&VisualEntityId, &mut VisualMotion)>,
+    level_roots: Query<Entity, With<LevelRoot>>,
 ) {
     // Only run when a new tick just fired (events waiting) — NOT every frame
     // while animating.  advance_interpolation_system handles the tween
@@ -52,23 +53,23 @@ pub fn sync_visuals(
 
     // spawn new elements that appeared this tick
     let tile = projection.tile_size();
+    let level_root = level_roots.iter().next();
     for (cell, state) in &bridge.world.elements {
         if entity_map.0.contains_key(&state.id) {
             continue;
         }
         let pos = projection.project(*cell, 1.0);
-        let id = if let Some(ref sa) = assets {
-            let img = sa.for_element(&state.kind, state.direction);
+        let spawn = if let Some(ref sa) = assets {
             commands.spawn((
                 Sprite {
-                    image: img,
+                    image: sa.for_element(&state.kind, state.direction),
                     custom_size: Some(Vec2::splat(tile)),
                     ..default()
                 },
                 Transform::from_translation(pos),
                 VisualMotion { from: *cell, to: *cell, progress: 1.0, duration: crate::bridge::ANIM_SECS },
                 VisualEntityId(state.id),
-            )).id()
+            ))
         } else {
             commands.spawn((
                 Sprite {
@@ -79,8 +80,12 @@ pub fn sync_visuals(
                 Transform::from_translation(pos),
                 VisualMotion { from: *cell, to: *cell, progress: 1.0, duration: crate::bridge::ANIM_SECS },
                 VisualEntityId(state.id),
-            )).id()
+            ))
         };
+        let id = spawn.id();
+        if let Some(root) = level_root {
+            commands.entity(id).set_parent(root);
+        }
         entity_map.0.insert(state.id, id);
     }
 
@@ -154,7 +159,7 @@ pub fn update_entity_transforms(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Full level rebuild (on LoadLevelEvent / ReloadVisualsEvent)
+// Full level rebuild (on ReloadVisualsEvent, after load_level_system)
 // ─────────────────────────────────────────────────────────────────────────────
 
 pub fn rebuild_level_visuals(
@@ -165,13 +170,19 @@ pub fn rebuild_level_visuals(
     mut entity_map: ResMut<EntityMap>,
     level_roots: Query<Entity, With<LevelRoot>>,
     mut reload: EventReader<ReloadVisualsEvent>,
-    mut load_level: EventReader<crate::bridge::LoadLevelEvent>,
 ) {
-    if reload.read().next().is_none() && load_level.read().next().is_none() {
+    if reload.read().next().is_none() {
         return;
     }
+
     despawn_level(&mut commands, &level_roots, &mut entity_map);
-    spawn_level_visuals(&mut commands, &bridge.world, &projection, assets.as_deref(), &mut entity_map);
+    spawn_level_visuals(
+        &mut commands,
+        &bridge.world,
+        &projection,
+        assets.as_deref(),
+        &mut entity_map,
+    );
 }
 
 pub fn spawn_level_visuals(
@@ -183,71 +194,93 @@ pub fn spawn_level_visuals(
 ) {
     entity_map.0.clear();
     let tile = projection.tile_size();
-    commands.spawn((Name::new("LevelRoot"), LevelRoot));
+    // Parent must carry Transform + Visibility or child sprites won't render (Bevy B0004).
+    let root = commands
+        .spawn((
+            Name::new("LevelRoot"),
+            LevelRoot,
+            Transform::default(),
+            Visibility::default(),
+        ))
+        .id();
 
-    // tile layer
-    for row in 0..world.height {
-        for col in 0..world.width {
-            let cell = Cell::new(col as i16, row as i16);
-            let idx = row as usize * world.width as usize + col as usize;
-            let tile_kind = world.tiles[idx];
-            let pos = projection.project(cell, 0.0);
-            if let Some(sa) = assets {
-                if let Some(img) = sa.for_tile(tile_kind) {
-                    commands.spawn((
+    commands.entity(root).with_children(|parent| {
+        // tile layer
+        for row in 0..world.height {
+            for col in 0..world.width {
+                let cell = Cell::new(col as i16, row as i16);
+                let idx = row as usize * world.width as usize + col as usize;
+                let tile_kind = world.tiles[idx];
+                let pos = projection.project(cell, 0.0);
+                if let Some(sa) = assets {
+                    if let Some(img) = sa.for_tile(tile_kind) {
+                        parent.spawn((
+                            Sprite {
+                                image: img,
+                                custom_size: Some(Vec2::splat(tile)),
+                                ..default()
+                            },
+                            Transform::from_translation(pos),
+                            TileSprite { tile_kind },
+                        ));
+                        continue;
+                    }
+                }
+                parent.spawn((
+                    Sprite {
+                        custom_size: Some(Vec2::splat(tile)),
+                        color: fallback_tile_color(tile_kind),
+                        ..default()
+                    },
+                    Transform::from_translation(pos),
+                    TileSprite { tile_kind },
+                ));
+            }
+        }
+
+        // entity layer
+        for (cell, state) in &world.elements {
+            let pos = projection.project(*cell, 1.0);
+            let entity_id = if let Some(sa) = assets {
+                parent
+                    .spawn((
                         Sprite {
-                            image: img,
+                            image: sa.for_element(&state.kind, state.direction),
                             custom_size: Some(Vec2::splat(tile)),
                             ..default()
                         },
                         Transform::from_translation(pos),
-                        TileSprite { tile_kind },
-                    ));
-                    continue;
-                }
-            }
-            // fallback colour
-            commands.spawn((
-                Sprite {
-                    custom_size: Some(Vec2::splat(tile)),
-                    color: fallback_tile_color(tile_kind),
-                    ..default()
-                },
-                Transform::from_translation(pos),
-                TileSprite { tile_kind },
-            ));
+                        VisualMotion {
+                            from: *cell,
+                            to: *cell,
+                            progress: 1.0,
+                            duration: crate::bridge::ANIM_SECS,
+                        },
+                        VisualEntityId(state.id),
+                    ))
+                    .id()
+            } else {
+                parent
+                    .spawn((
+                        Sprite {
+                            custom_size: Some(Vec2::splat(tile * 0.8)),
+                            color: fallback_entity_color(&state.kind),
+                            ..default()
+                        },
+                        Transform::from_translation(pos),
+                        VisualMotion {
+                            from: *cell,
+                            to: *cell,
+                            progress: 1.0,
+                            duration: crate::bridge::ANIM_SECS,
+                        },
+                        VisualEntityId(state.id),
+                    ))
+                    .id()
+            };
+            entity_map.0.insert(state.id, entity_id);
         }
-    }
-
-    // entity layer
-    for (cell, state) in &world.elements {
-        let pos = projection.project(*cell, 1.0);
-        let entity_id = if let Some(sa) = assets {
-            let img = sa.for_element(&state.kind, state.direction);
-            commands.spawn((
-                Sprite {
-                    image: img,
-                    custom_size: Some(Vec2::splat(tile)),
-                    ..default()
-                },
-                Transform::from_translation(pos),
-                VisualMotion { from: *cell, to: *cell, progress: 1.0, duration: crate::bridge::ANIM_SECS },
-                VisualEntityId(state.id),
-            )).id()
-        } else {
-            commands.spawn((
-                Sprite {
-                    custom_size: Some(Vec2::splat(tile * 0.8)),
-                    color: fallback_entity_color(&state.kind),
-                    ..default()
-                },
-                Transform::from_translation(pos),
-                VisualMotion { from: *cell, to: *cell, progress: 1.0, duration: crate::bridge::ANIM_SECS },
-                VisualEntityId(state.id),
-            )).id()
-        };
-        entity_map.0.insert(state.id, entity_id);
-    }
+    });
 }
 
 fn despawn_level(
@@ -255,8 +288,9 @@ fn despawn_level(
     level_roots: &Query<Entity, With<LevelRoot>>,
     entity_map: &mut EntityMap,
 ) {
-    for e in entity_map.0.values() {
-        commands.entity(*e).despawn();
+    // Orphan runtime spawns (projectiles etc.) live outside LevelRoot — despawn explicitly.
+    for entity in entity_map.0.values() {
+        commands.entity(*entity).despawn();
     }
     entity_map.0.clear();
     for root in level_roots {

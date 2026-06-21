@@ -115,8 +115,9 @@ fn configure_app(app: &mut App, allow_any_thread: bool) {
                 bridge::release_queued_input,
                 render::sync_visuals,
                 interpolation::advance_interpolation_system,
-                render::update_entity_transforms,
+                ui::load_level_system,
                 render::rebuild_level_visuals,
+                render::update_entity_transforms,
                 camera::reset_camera_on_level_load,
                 camera::update_camera,
                 ui::tick_speedrun_timer,
@@ -180,7 +181,6 @@ fn configure_app(app: &mut App, allow_any_thread: bool) {
             (ui::spawn_menu_overlay, log_state::<AppState>),
         )
         .add_systems(OnExit(AppState::GameOver), ui::cleanup_overlay)
-        .add_systems(Update, ui::load_level_system)
         .add_systems(
             Update,
             render::update_robbo_sprite
