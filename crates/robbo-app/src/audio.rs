@@ -327,6 +327,25 @@ pub fn resume_bgm_on_unpause(
     );
 }
 
+fn play_music_stinger(
+    commands: &mut Commands,
+    audio: &GameAudio,
+    save: &GameSave,
+    key: &str,
+) {
+    let vol = effective_music_volume(save);
+    if vol <= 0.001 {
+        return;
+    }
+    let Some(handle) = audio.sfx.get(key) else {
+        return;
+    };
+    commands.spawn((
+        AudioPlayer::new(handle.clone()),
+        PlaybackSettings::DESPAWN.with_volume(Volume::new(vol.clamp(0.0, 1.0))),
+    ));
+}
+
 pub fn play_sfx(
     commands: &mut Commands,
     audio: &GameAudio,
@@ -365,6 +384,10 @@ pub fn sfx_on_core_events(
 ) {
     let listener = bridge.world.robbo_cell();
     for CoreGameEvent(event) in reader.read() {
+        if matches!(event, GameEvent::LevelComplete) {
+            play_music_stinger(&mut commands, &audio, &save, "level_complete");
+            continue;
+        }
         let mapped = match event {
             GameEvent::Moved { entity_id, to, .. } if *entity_id == bridge.world.robbo_id => {
                 Some(("walk", Some(*to)))
@@ -385,7 +408,6 @@ pub fn sfx_on_core_events(
             GameEvent::Died { entity_id, .. } if *entity_id == bridge.world.robbo_id => {
                 Some(("death", listener))
             }
-            GameEvent::LevelComplete => Some(("level_complete", None)),
             _ => None,
         };
         if let Some((key, source)) = mapped {

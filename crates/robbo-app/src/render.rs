@@ -2,10 +2,15 @@ use bevy::prelude::*;
 use robbo_core::{Cell, Direction, ElementKind, GameEvent, TileKind};
 
 use crate::assets::{SpriteAssets, bear_direction_rotation, dir_to_idx};
-use crate::bridge::{CoreBridge, EntityMap, GameTickTimer, ReloadVisualsEvent, TileEntityMap, TICK_SECS};
-use crate::effects::{CapsuleVisual, MagnetVisual, ScrewVisual};
+use crate::bridge::{CoreBridge, EntityMap, GameSession, GameTickTimer, ReloadVisualsEvent, TileEntityMap, TICK_SECS};
+use crate::effects::{
+    clear_magnet_beam_cache, CapsuleVisual, CollectPopEffect, FxParticle, MagnetBeamCache, MagnetVisual,
+    TeleportAuraAnchor, projectile_sprite_bundle, projectile_visual_for, ProjectileVisual, ScrewVisual,
+};
+use crate::input::SteeringState;
 use crate::interpolation::{VisualEntityId, VisualMotion, interpolated_pos, tick_phase, visual_step_ticks};
 use crate::projection::ActiveProjection;
+use crate::ui::{LevelCountdown, SpeedrunTimer};
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Components
@@ -67,6 +72,12 @@ const BEAR_SCALE_AMP: f32 = 0.05;
 /// One sim tick to spin between facing directions.
 const BEAR_TURN_TICKS: f32 = 1.0;
 
+fn try_despawn(commands: &mut Commands, entity: Entity) {
+    if commands.get_entity(entity).is_some() {
+        commands.entity(entity).despawn();
+    }
+}
+
 fn is_bear_kind(kind: &ElementKind) -> bool {
     matches!(
         kind,
@@ -78,6 +89,27 @@ fn magnet_direction(kind: &ElementKind) -> Option<Direction> {
     match kind {
         ElementKind::Magnet { direction } => Some(*direction),
         _ => None,
+    }
+}
+
+fn spawn_element_sprite(
+    sa: &SpriteAssets,
+    kind: &ElementKind,
+    direction: Direction,
+    tile: f32,
+) -> (Sprite, Option<ProjectileVisual>) {
+    if projectile_visual_for(kind).is_some() {
+        let (sprite, visual) = projectile_sprite_bundle(kind, direction, tile);
+        (sprite, Some(visual))
+    } else {
+        (
+            Sprite {
+                image: sa.for_element(kind, direction),
+                custom_size: Some(Vec2::splat(tile)),
+                ..default()
+            },
+            None,
+        )
     }
 }
 
@@ -183,7 +215,7 @@ pub fn sync_visuals(
         if current_ids.contains(id) {
             true
         } else {
-            commands.entity(*entity).despawn();
+            try_despawn(&mut commands, *entity);
             false
         }
     });
@@ -207,15 +239,38 @@ pub fn sync_visuals(
         };
         let pos = projection.project(motion.from, 1.0);
         let spawn = if let Some(ref sa) = assets {
+            let (sprite, projectile) =
+                spawn_element_sprite(sa, &state.kind, state.direction, tile);
             let mut entity = commands.spawn((
-                Sprite {
-                    image: sa.for_element(&state.kind, state.direction),
-                    custom_size: Some(Vec2::splat(tile)),
-                    ..default()
-                },
+                sprite,
                 Transform::from_translation(pos),
                 motion,
                 VisualEntityId(state.id),
+            ));
+            if let Some(pv) = projectile {
+                entity.insert(pv);
+            }
+            if is_bear_kind(&state.kind) {
+                entity.insert(BearVisual::new(state.direction, sim_tick as f32));
+            }
+            if let Some(dir) = magnet_direction(&state.kind) {
+                entity.insert(MagnetVisual::new(dir));
+            }
+            if matches!(state.kind, ElementKind::Screw) {
+                entity.insert(ScrewVisual::from_cell(cell.col, cell.row));
+            }
+            if matches!(state.kind, ElementKind::Capsule) {
+                entity.insert(CapsuleVisual::from_cell(cell.col, cell.row));
+            }
+            entity
+        } else if projectile_visual_for(&state.kind).is_some() {
+            let (sprite, pv) = projectile_sprite_bundle(&state.kind, state.direction, tile);
+            let mut entity = commands.spawn((
+                sprite,
+                Transform::from_translation(pos),
+                motion,
+                VisualEntityId(state.id),
+                pv,
             ));
             if is_bear_kind(&state.kind) {
                 entity.insert(BearVisual::new(state.direction, sim_tick as f32));
@@ -387,6 +442,9 @@ pub fn update_entity_sprites(
         if matches!(state.kind, ElementKind::Capsule) {
             continue;
         }
+        if projectile_visual_for(&state.kind).is_some() {
+            continue;
+        }
         sprite.image = sa.for_element(&state.kind, state.direction);
     }
 }
@@ -446,7 +504,7 @@ pub fn update_entity_transforms(
     projection: Res<ActiveProjection>,
     mut query: Query<
         (&VisualMotion, &mut Transform),
-        (With<VisualEntityId>, Without<BearVisual>, Without<MagnetVisual>, Without<CapsuleVisual>, Without<ScrewVisual>),
+        (With<VisualEntityId>, Without<BearVisual>, Without<MagnetVisual>, Without<CapsuleVisual>, Without<ProjectileVisual>, Without<ScrewVisual>),
     >,
 ) {
     for (motion, mut transform) in &mut query {
@@ -465,6 +523,7 @@ pub fn rebuild_level_visuals(
     assets: Option<Res<SpriteAssets>>,
     mut entity_map: ResMut<EntityMap>,
     mut tile_map: ResMut<TileEntityMap>,
+    mut magnet_cache: ResMut<MagnetBeamCache>,
     level_roots: Query<Entity, With<LevelRoot>>,
     mut reload: EventReader<ReloadVisualsEvent>,
 ) {
@@ -472,6 +531,7 @@ pub fn rebuild_level_visuals(
         return;
     }
 
+    clear_magnet_beam_cache(&mut magnet_cache);
     despawn_level(&mut commands, &level_roots, &mut entity_map, &mut tile_map);
     spawn_level_visuals(
         &mut commands,
@@ -554,16 +614,17 @@ pub fn spawn_level_visuals(
         for (cell, state) in &world.elements {
             let pos = projection.project(*cell, 1.0);
             let entity_id = if let Some(sa) = assets {
+                let (sprite, projectile) =
+                    spawn_element_sprite(sa, &state.kind, state.direction, tile);
                 let mut spawn = parent.spawn((
-                    Sprite {
-                        image: sa.for_element(&state.kind, state.direction),
-                        custom_size: Some(Vec2::splat(tile)),
-                        ..default()
-                    },
+                    sprite,
                     Transform::from_translation(pos),
                     VisualMotion::settled(*cell, world.tick),
                     VisualEntityId(state.id),
                 ));
+                if let Some(pv) = projectile {
+                    spawn.insert(pv);
+                }
                 if is_bear_kind(&state.kind) {
                     spawn.insert(BearVisual::new(state.direction, world.tick as f32));
                 }
@@ -577,6 +638,18 @@ pub fn spawn_level_visuals(
                     spawn.insert(CapsuleVisual::from_cell(cell.col, cell.row));
                 }
                 spawn.id()
+            } else if projectile_visual_for(&state.kind).is_some() {
+                let (sprite, pv) =
+                    projectile_sprite_bundle(&state.kind, state.direction, tile);
+                parent
+                    .spawn((
+                        sprite,
+                        Transform::from_translation(pos),
+                        VisualMotion::settled(*cell, world.tick),
+                        VisualEntityId(state.id),
+                        pv,
+                    ))
+                    .id()
             } else {
                 parent
                     .spawn((
@@ -602,15 +675,55 @@ fn despawn_level(
     entity_map: &mut EntityMap,
     tile_map: &mut TileEntityMap,
 ) {
-    // Orphan runtime spawns (projectiles etc.) live outside LevelRoot — despawn explicitly.
+    for root in level_roots.iter() {
+        commands.entity(root).despawn_recursive();
+    }
+    // Orphan runtime spawns (projectiles etc.) may live outside LevelRoot.
     for entity in entity_map.0.values() {
-        commands.entity(*entity).despawn();
+        try_despawn(commands, *entity);
     }
     entity_map.0.clear();
     tile_map.0.clear();
-    for root in level_roots {
-        commands.entity(root).despawn_recursive();
+}
+
+/// Remove the active level scene and transient FX (menu / level-select transitions).
+pub fn teardown_level_scene(
+    mut commands: Commands,
+    mut entity_map: ResMut<EntityMap>,
+    mut tile_map: ResMut<TileEntityMap>,
+    mut magnet_cache: ResMut<MagnetBeamCache>,
+    level_roots: Query<Entity, With<LevelRoot>>,
+    fx_particles: Query<Entity, With<FxParticle>>,
+    teleport_anchors: Query<Entity, With<TeleportAuraAnchor>>,
+    explosions: Query<Entity, With<ExplosionEffect>>,
+    collect_pops: Query<Entity, With<CollectPopEffect>>,
+) {
+    clear_magnet_beam_cache(&mut magnet_cache);
+    for entity in fx_particles
+        .iter()
+        .chain(teleport_anchors.iter())
+        .chain(explosions.iter())
+        .chain(collect_pops.iter())
+    {
+        try_despawn(&mut commands, entity);
     }
+    despawn_level(&mut commands, &level_roots, &mut entity_map, &mut tile_map);
+}
+
+/// Reset simulation resources when leaving gameplay for a menu scene.
+pub fn reset_sim_on_menu(
+    mut bridge: ResMut<CoreBridge>,
+    mut session: ResMut<GameSession>,
+    mut timer: ResMut<SpeedrunTimer>,
+    mut countdown: ResMut<LevelCountdown>,
+    mut steering: ResMut<SteeringState>,
+) {
+    *bridge = CoreBridge::default();
+    *session = GameSession::default();
+    timer.elapsed_ms = 0;
+    timer.running = false;
+    *countdown = LevelCountdown::default();
+    *steering = SteeringState::default();
 }
 
 fn start_tile_vanish(commands: &mut Commands, tile_map: &TileEntityMap, cell: Cell) {

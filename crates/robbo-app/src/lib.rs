@@ -38,7 +38,7 @@ use bridge::{CoreBridge, EntityMap, GameSession, GameTickTimer, LoadLevelEvent, 
 use effects::{
     clear_magnet_beams_on_reload, fx_on_core_events, sync_fx_auras, tick_collect_pop_effects,
     tick_fx_particles, tick_teleport_auras, update_capsule_visuals, update_magnet_beams,
-    update_magnet_visuals, update_screw_visuals, MagnetBeamCache,
+    update_magnet_visuals, update_projectile_visuals, update_screw_visuals, MagnetBeamCache,
 };
 use game_menus::{
     cleanup_game_menu, game_menu_button_input, spawn_game_menu, update_level_select_menu,
@@ -169,6 +169,10 @@ fn configure_app(app: &mut App, allow_any_thread: bool) {
                 camera::handle_zoom_buttons,
             ),
         )
+        .add_systems(
+            Update,
+            update_projectile_visuals.after(render::update_entity_transforms),
+        )
         .add_systems(OnEnter(AppState::Playing), spawn_level_hud)
         .add_systems(
             OnExit(AppState::Playing),
@@ -176,12 +180,26 @@ fn configure_app(app: &mut App, allow_any_thread: bool) {
         )
         .add_systems(
             OnEnter(AppState::MainMenu),
-            (spawn_main_menu, play_menu_bgm, log_state::<AppState>),
+            (
+                render::teardown_level_scene,
+                render::reset_sim_on_menu,
+                spawn_main_menu,
+                play_menu_bgm,
+                log_state::<AppState>,
+            )
+                .chain(),
         )
         .add_systems(OnExit(AppState::MainMenu), (cleanup_main_menu, stop_bgm))
         .add_systems(
             OnEnter(AppState::LevelSelect),
-            (spawn_game_menu, stop_bgm, log_state::<AppState>),
+            (
+                render::teardown_level_scene,
+                render::reset_sim_on_menu,
+                spawn_game_menu,
+                stop_bgm,
+                log_state::<AppState>,
+            )
+                .chain(),
         )
         .add_systems(OnExit(AppState::LevelSelect), cleanup_game_menu)
         .add_systems(

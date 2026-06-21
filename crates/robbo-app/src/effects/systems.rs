@@ -9,7 +9,7 @@ use crate::render::LevelRoot;
 
 use super::collect::{is_collect_pop_kind, spawn_collect_pop};
 use super::particle::{FxParticle, FxParticleState};
-use super::presets::{spawn_explosion_burst, spawn_shot_trail, spawn_teleport_burst};
+use super::presets::{spawn_explosion_burst, spawn_shot_fx, spawn_teleport_burst};
 
 /// Observer: react to core events with short-lived particles (no sim impact).
 pub fn fx_on_core_events(
@@ -36,8 +36,20 @@ pub fn fx_on_core_events(
             GameEvent::Exploded { at } | GameEvent::Revealed { at } => {
                 spawn_explosion_burst(&mut commands, &projection, level_root, *at, tile);
             }
-            GameEvent::Shot { from, direction, .. } => {
-                spawn_shot_trail(&mut commands, &projection, level_root, *from, *direction, tile);
+            GameEvent::Shot {
+                from,
+                direction,
+                gun_type,
+            } => {
+                spawn_shot_fx(
+                    &mut commands,
+                    &projection,
+                    level_root,
+                    *from,
+                    *direction,
+                    *gun_type,
+                    tile,
+                );
             }
             GameEvent::Collected { kind, at } if is_collect_pop_kind(kind) => {
                 if let Some(ref sa) = assets {

@@ -31,6 +31,11 @@ struct MagnetBeamSegment;
 #[derive(Resource, Default)]
 pub struct MagnetBeamCache(pub(crate) Vec<Entity>);
 
+/// Drop cached beam entity ids without despawning (parent `LevelRoot` teardown handles that).
+pub fn clear_magnet_beam_cache(cache: &mut MagnetBeamCache) {
+    cache.0.clear();
+}
+
 fn magnet_facing(kind: &ElementKind) -> Option<Direction> {
     match kind {
         ElementKind::Magnet { direction } => Some(*direction),
@@ -41,14 +46,11 @@ fn magnet_facing(kind: &ElementKind) -> Option<Direction> {
 pub fn clear_magnet_beams_on_reload(
     mut reload: EventReader<ReloadVisualsEvent>,
     mut cache: ResMut<MagnetBeamCache>,
-    mut commands: Commands,
 ) {
     if reload.read().next().is_none() {
         return;
     }
-    for entity in cache.0.drain(..) {
-        commands.entity(entity).despawn();
-    }
+    clear_magnet_beam_cache(&mut cache);
 }
 
 pub fn update_magnet_visuals(
@@ -99,7 +101,9 @@ pub fn update_magnet_beams(
     }
 
     for entity in cache.0.drain(..) {
-        commands.entity(entity).despawn();
+        if commands.get_entity(entity).is_some() {
+            commands.entity(entity).despawn();
+        }
     }
 
     let Some(root) = level_roots.iter().next() else {

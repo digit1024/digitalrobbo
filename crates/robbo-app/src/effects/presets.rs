@@ -1,5 +1,5 @@
 use bevy::prelude::*;
-use robbo_core::{Cell, Direction};
+use robbo_core::{Cell, Direction, GunType};
 
 use crate::projection::ActiveProjection;
 
@@ -206,8 +206,25 @@ pub fn spawn_explosion_burst(
     }
 }
 
-/// Yellow spark trail along the first cells of a laser bolt path.
-pub fn spawn_shot_trail(
+/// Muzzle / spawn FX keyed to gnurobbo gun shot types.
+pub fn spawn_shot_fx(
+    commands: &mut Commands,
+    projection: &ActiveProjection,
+    level_root: Option<Entity>,
+    from: Cell,
+    direction: Direction,
+    gun_type: GunType,
+    tile: f32,
+) {
+    match gun_type {
+        GunType::Regular => spawn_bolt_shot_fx(commands, projection, level_root, from, direction, tile),
+        GunType::Laser => spawn_laser_shot_fx(commands, projection, level_root, from, direction, tile),
+        GunType::Blaster => spawn_blaster_shot_fx(commands, projection, level_root, from, direction, tile),
+    }
+}
+
+/// Moving bolt (Robbo / regular gun): warm comet from muzzle along travel axis.
+fn spawn_bolt_shot_fx(
     commands: &mut Commands,
     projection: &ActiveProjection,
     level_root: Option<Entity>,
@@ -216,29 +233,130 @@ pub fn spawn_shot_trail(
     tile: f32,
 ) {
     let (dc, dr) = direction.delta();
+    let muzzle = projection.project(from, FX_Z_LAYER);
+    spawn_particle(
+        commands,
+        level_root,
+        muzzle,
+        Vec2::ZERO,
+        Color::srgba(1.0, 0.98, 0.75, 0.95),
+        tile * 0.32,
+        0.12,
+        2.0,
+    );
+
     let colors = [
         Color::srgba(1.0, 0.95, 0.55, 0.9),
-        Color::srgba(1.0, 0.75, 0.2, 0.85),
-        Color::srgba(1.0, 0.55, 0.1, 0.75),
+        Color::srgba(1.0, 0.78, 0.22, 0.82),
+        Color::srgba(1.0, 0.58, 0.1, 0.7),
     ];
-
     for i in 0..SHOT_TRAIL_COUNT {
         let step = i as i16 + 1;
         let cell = from.offset(dc * step, dr * step);
         let origin = projection.project(cell, FX_Z_LAYER);
         let along = Vec2::new(dc as f32, -dr as f32).normalize_or_zero() * SHOT_TRAIL_SPEED;
-        let spread = Vec2::new(-along.y, along.x) * ((i as f32 * 1.3).sin() * 8.0);
-        let velocity = along + spread;
-
+        let spread = Vec2::new(-along.y, along.x) * ((i as f32 * 1.3).sin() * 6.0);
         spawn_particle(
             commands,
             level_root,
             origin,
-            velocity,
+            along + spread,
             colors[i as usize % colors.len()],
-            tile * 0.14,
+            tile * 0.13,
             SHOT_TRAIL_DURATION,
             1.5,
         );
     }
+}
+
+/// Solid laser gun: red flash at barrel.
+fn spawn_laser_shot_fx(
+    commands: &mut Commands,
+    projection: &ActiveProjection,
+    level_root: Option<Entity>,
+    from: Cell,
+    direction: Direction,
+    tile: f32,
+) {
+    let (dc, dr) = direction.delta();
+    let origin = projection.project(from, FX_Z_LAYER);
+    spawn_particle(
+        commands,
+        level_root,
+        origin,
+        Vec2::ZERO,
+        Color::srgba(1.0, 0.2, 0.08, 0.95),
+        tile * 0.38,
+        0.14,
+        2.5,
+    );
+    let along = Vec2::new(dc as f32, -dr as f32).normalize_or_zero();
+    for i in 0..3 {
+        let cell = from.offset(dc * (i + 1), dr * (i + 1));
+        let pos = projection.project(cell, FX_Z_LAYER);
+        spawn_particle(
+            commands,
+            level_root,
+            pos,
+            along * 12.0,
+            Color::srgba(1.0, 0.12, 0.06, 0.55 - i as f32 * 0.12),
+            tile * 0.18,
+            0.18,
+            1.2,
+        );
+    }
+}
+
+/// Blaster: orange shockwave bloom at muzzle.
+fn spawn_blaster_shot_fx(
+    commands: &mut Commands,
+    projection: &ActiveProjection,
+    level_root: Option<Entity>,
+    from: Cell,
+    direction: Direction,
+    tile: f32,
+) {
+    let origin = projection.project(from, FX_Z_LAYER);
+    spawn_particle(
+        commands,
+        level_root,
+        origin,
+        Vec2::ZERO,
+        Color::srgba(1.0, 0.65, 0.12, 0.9),
+        tile * 0.42,
+        0.16,
+        2.0,
+    );
+    let (dc, dr) = direction.delta();
+    let forward = Vec2::new(dc as f32, -dr as f32).normalize_or_zero();
+    let side = Vec2::new(-forward.y, forward.x);
+    for (vel, size) in [
+        (forward * 22.0, tile * 0.16),
+        (-forward * 14.0, tile * 0.12),
+        (side * 18.0, tile * 0.14),
+        (-side * 18.0, tile * 0.14),
+    ] {
+        spawn_particle(
+            commands,
+            level_root,
+            origin,
+            vel,
+            Color::srgba(1.0, 0.48, 0.08, 0.75),
+            size,
+            0.24,
+            1.4,
+        );
+    }
+}
+
+/// Deprecated alias — use [`spawn_shot_fx`].
+pub fn spawn_shot_trail(
+    commands: &mut Commands,
+    projection: &ActiveProjection,
+    level_root: Option<Entity>,
+    from: Cell,
+    direction: Direction,
+    tile: f32,
+) {
+    spawn_bolt_shot_fx(commands, projection, level_root, from, direction, tile);
 }
