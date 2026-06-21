@@ -144,15 +144,27 @@ pub fn play_menu_bgm(
     save: Res<GameSave>,
     gate: Res<AudioGate>,
 ) {
+    play_menu_bgm_now(&mut commands, &audio, &manifest, &mut bgm, &save, &gate);
+}
+
+/// Callable from intro when the title card appears (original `showTitle` timing).
+pub fn play_menu_bgm_now(
+    commands: &mut Commands,
+    audio: &GameAudio,
+    manifest: &AudioManifest,
+    bgm: &mut BgmState,
+    save: &GameSave,
+    gate: &AudioGate,
+) {
     if !gate.unlocked {
         return;
     }
     start_bgm(
-        &mut commands,
-        &mut bgm,
+        commands,
+        bgm,
         &manifest.0.menu_music,
         audio.menu_bgm.clone(),
-        effective_music_volume(&save),
+        effective_music_volume(save),
     );
 }
 

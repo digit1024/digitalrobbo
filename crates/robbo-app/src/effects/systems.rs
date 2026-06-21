@@ -2,12 +2,14 @@ use bevy::prelude::*;
 use robbo_core::GameEvent;
 
 use crate::app_state::AppState;
+use crate::assets::SpriteAssets;
 use crate::bridge::CoreGameEvent;
 use crate::projection::ActiveProjection;
 use crate::render::LevelRoot;
 
+use super::collect::{is_collect_pop_kind, spawn_collect_pop};
 use super::particle::{FxParticle, FxParticleState};
-use super::presets::spawn_teleport_burst;
+use super::presets::{spawn_explosion_burst, spawn_shot_trail, spawn_teleport_burst};
 
 /// Observer: react to core events with short-lived particles (no sim impact).
 pub fn fx_on_core_events(
@@ -15,6 +17,7 @@ pub fn fx_on_core_events(
     mut commands: Commands,
     mut reader: EventReader<CoreGameEvent>,
     projection: Res<ActiveProjection>,
+    assets: Option<Res<SpriteAssets>>,
     level_roots: Query<Entity, With<LevelRoot>>,
 ) {
     if *state.get() != AppState::Playing {
@@ -30,8 +33,27 @@ pub fn fx_on_core_events(
                 spawn_teleport_burst(&mut commands, &projection, level_root, *from, tile);
                 spawn_teleport_burst(&mut commands, &projection, level_root, *to, tile);
             }
-            // GameEvent::Exploded { at } => { ... FxPreset::Explosion }
-            // GameEvent::Shot { from, direction } => { ... FxPreset::ShotTrail }
+            GameEvent::Exploded { at } | GameEvent::Revealed { at } => {
+                spawn_explosion_burst(&mut commands, &projection, level_root, *at, tile);
+            }
+            GameEvent::Shot { from, direction } => {
+                spawn_shot_trail(&mut commands, &projection, level_root, *from, *direction, tile);
+            }
+            GameEvent::Collected { kind, at } if is_collect_pop_kind(kind) => {
+                if let Some(ref sa) = assets {
+                    if let Some(image) = sa.for_collectible(kind) {
+                        spawn_collect_pop(
+                            &mut commands,
+                            &projection,
+                            level_root,
+                            *at,
+                            kind,
+                            tile,
+                            image,
+                        );
+                    }
+                }
+            }
             _ => {}
         }
     }

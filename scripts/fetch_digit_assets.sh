@@ -17,6 +17,24 @@ fetch() {
     curl -fsSL "$url" -o "$dest"
 }
 
+slice_atlas() {
+    local atlas="$ROOT/assets/ui/robbo_atlas.png"
+    local out_dir="$ROOT/assets/ui"
+    if [[ ! -f "$atlas" ]]; then
+        return
+    fi
+    if [[ -f "$out_dir/bmideas.png" ]]; then
+        echo "skip atlas slices"
+        return
+    fi
+    if ! command -v convert &>/dev/null; then
+        echo "warn: install imagemagick to slice bmideas.png from robbo_atlas.png"
+        return
+    fi
+    echo "slice atlas frames"
+    convert "$atlas" -crop 623x207+2+368 +repage "$out_dir/bmideas.png"
+}
+
 # ── fonts ─────────────────────────────────────────────────────────────
 fetch "$ROOT/assets/fonts/MarkerFelt.ttf" \
     "$BASE/fonts/Marker%20Felt.ttf"
@@ -25,6 +43,9 @@ fetch "$ROOT/assets/fonts/MarkerFelt.ttf" \
 for name in space.png planet.png mute.png unmute.png settings.png; do
     fetch "$ROOT/assets/ui/$name" "$BASE/$name"
 done
+
+fetch "$ROOT/assets/ui/robbo_atlas.png" "$BASE/robbo.png"
+slice_atlas
 
 # ── SFX (.ogg on Linux, matching original SOUND_EXT) ────────────────────
 SFX=(

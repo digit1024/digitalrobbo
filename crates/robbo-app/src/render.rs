@@ -3,6 +3,7 @@ use robbo_core::{Cell, Direction, ElementKind, GameEvent, TileKind};
 
 use crate::assets::{SpriteAssets, bear_direction_rotation, dir_to_idx};
 use crate::bridge::{CoreBridge, EntityMap, GameTickTimer, ReloadVisualsEvent, TileEntityMap, TICK_SECS};
+use crate::effects::ScrewVisual;
 use crate::interpolation::{VisualEntityId, VisualMotion, interpolated_pos, tick_phase, visual_step_ticks};
 use crate::projection::ActiveProjection;
 
@@ -212,6 +213,9 @@ pub fn sync_visuals(
             if is_bear_kind(&state.kind) {
                 entity.insert(BearVisual::new(state.direction, sim_tick as f32));
             }
+            if matches!(state.kind, ElementKind::Screw) {
+                entity.insert(ScrewVisual::from_cell(cell.col, cell.row));
+            }
             entity
         } else {
             let mut entity = commands.spawn((
@@ -226,6 +230,9 @@ pub fn sync_visuals(
             ));
             if is_bear_kind(&state.kind) {
                 entity.insert(BearVisual::new(state.direction, sim_tick as f32));
+            }
+            if matches!(state.kind, ElementKind::Screw) {
+                entity.insert(ScrewVisual::from_cell(cell.col, cell.row));
             }
             entity
         };
@@ -414,7 +421,7 @@ pub fn update_entity_transforms(
     projection: Res<ActiveProjection>,
     mut query: Query<
         (&VisualMotion, &mut Transform),
-        (With<VisualEntityId>, Without<BearVisual>),
+        (With<VisualEntityId>, Without<BearVisual>, Without<crate::effects::ScrewVisual>),
     >,
 ) {
     for (motion, mut transform) in &mut query {
@@ -534,6 +541,9 @@ pub fn spawn_level_visuals(
                 ));
                 if is_bear_kind(&state.kind) {
                     spawn.insert(BearVisual::new(state.direction, world.tick as f32));
+                }
+                if matches!(state.kind, ElementKind::Screw) {
+                    spawn.insert(ScrewVisual::from_cell(cell.col, cell.row));
                 }
                 spawn.id()
             } else {

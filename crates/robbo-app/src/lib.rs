@@ -16,6 +16,7 @@ mod pool;
 mod projection;
 mod render;
 mod ui;
+mod ui_anim;
 mod viewport;
 
 pub mod test_harness;
@@ -30,7 +31,10 @@ use bevy::log::LogPlugin;
 use bevy::prelude::*;
 use bevy::winit::{WakeUp, WinitPlugin};
 use bridge::{CoreBridge, EntityMap, GameSession, GameTickTimer, LoadLevelEvent, ReloadVisualsEvent, TileEntityMap};
-use effects::{fx_on_core_events, tick_fx_particles};
+use effects::{
+    fx_on_core_events, sync_fx_auras, tick_collect_pop_effects, tick_fx_particles,
+    tick_teleport_auras, update_screw_visuals,
+};
 use input::{apply_test_input, InputCooldown, SteeringState, TestInputInject};
 use intro::{setup_intro, spawn_intro, start_intro_audio};
 use levels::{LevelRegistry, LevelSelection};
@@ -121,7 +125,9 @@ fn configure_app(app: &mut App, allow_any_thread: bool) {
                 interpolation::advance_interpolation_system,
                 ui::load_level_system,
                 render::rebuild_level_visuals,
+                sync_fx_auras,
                 render::update_entity_transforms,
+                update_screw_visuals,
                 render::update_bear_visuals,
                 camera::reset_camera_on_level_load,
                 camera::update_camera,
@@ -141,7 +147,11 @@ fn configure_app(app: &mut App, allow_any_thread: bool) {
                 queue_level_bgm_on_load,
                 start_level_bgm_after_countdown,
                 unlock_audio_on_input,
+                ui_anim::tick_ui_fade,
+                intro::spawn_intro,
+                intro::intro_title_fly,
                 intro::update_intro_sequence,
+                intro::intro_title_music,
                 intro::intro_skip_input,
                 animate_menu_planet,
                 update_menu_highlight,
@@ -159,7 +169,7 @@ fn configure_app(app: &mut App, allow_any_thread: bool) {
         )
         .add_systems(
             OnEnter(AppState::Intro),
-            (start_intro_audio, spawn_intro, play_menu_bgm, log_state::<AppState>),
+            (start_intro_audio, log_state::<AppState>),
         )
         .add_systems(OnExit(AppState::Intro), intro::cleanup_intro)
         .add_systems(
@@ -193,6 +203,8 @@ fn configure_app(app: &mut App, allow_any_thread: bool) {
                 render::update_robbo_sprite,
                 render::update_entity_sprites,
                 tick_fx_particles,
+                tick_teleport_auras,
+                tick_collect_pop_effects,
                 render::update_explosion_effects,
                 render::update_tile_vanish_effects,
                 render::update_teleport_reveal,

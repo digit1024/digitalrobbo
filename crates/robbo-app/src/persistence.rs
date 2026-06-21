@@ -14,6 +14,9 @@ pub struct SaveData {
 pub struct ProfileData {
     pub last_pack: String,
     pub last_level: u32,
+    /// After the first full intro play-through, skip logo sequence on later launches.
+    #[serde(default)]
+    pub intro_seen: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]

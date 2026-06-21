@@ -90,7 +90,6 @@ impl SpriteAssets {
         }
     }
 
-    /// Image handle for a given element kind + direction.
     pub fn for_element(&self, kind: &ElementKind, dir: Direction) -> Handle<Image> {
         let dir_idx = dir_to_idx(dir);
         match kind {
@@ -115,6 +114,16 @@ impl SpriteAssets {
             ElementKind::BigBoom { .. } => self.bomb.clone(),
             ElementKind::BarbedWire => self.tile_wall_black.clone(),
             ElementKind::Stop => self.tile_empty.clone(),
+        }
+    }
+
+    /// Sprite shown on the collect pop (key, screw, ammo, life).
+    pub fn for_collectible(&self, kind: &ElementKind) -> Option<Handle<Image>> {
+        match kind {
+            ElementKind::Screw => Some(self.screw.clone()),
+            ElementKind::Key => Some(self.key.clone()),
+            ElementKind::BulletPickup => Some(self.bullet_pickup.clone()),
+            _ => None,
         }
     }
 
