@@ -25,8 +25,9 @@ pub mod test_harness;
 use app_state::AppState;
 use assets::SpriteAssets;
 use audio::{
-    load_audio_manifest, play_menu_bgm, queue_level_bgm_on_load, resume_bgm_on_unpause,
-    sfx_on_core_events, start_level_bgm_after_countdown, stop_bgm, unlock_audio_on_input,
+    cleanup_enemy_ambient_sounds, load_audio_manifest, play_menu_bgm, queue_level_bgm_on_load,
+    resume_bgm_on_unpause, sfx_on_core_events, start_level_bgm_after_countdown, stop_bgm,
+    unlock_audio_on_input, update_enemy_ambient_sounds,
 };
 use bevy::log::LogPlugin;
 use bevy::prelude::*;
@@ -142,6 +143,7 @@ fn configure_app(app: &mut App, allow_any_thread: bool) {
             Update,
             (
                 sfx_on_core_events,
+                update_enemy_ambient_sounds,
                 fx_on_core_events,
                 queue_level_bgm_on_load,
                 start_level_bgm_after_countdown,
@@ -159,31 +161,31 @@ fn configure_app(app: &mut App, allow_any_thread: bool) {
         .add_systems(OnEnter(AppState::Playing), ui::spawn_playing_hud)
         .add_systems(
             OnExit(AppState::Playing),
-            (ui::cleanup_hud, ui::cleanup_countdown_overlay),
+            (ui::cleanup_hud, ui::cleanup_countdown_overlay, stop_bgm, cleanup_enemy_ambient_sounds),
         )
         .add_systems(
             OnEnter(AppState::MainMenu),
             (spawn_main_menu, play_menu_bgm, log_state::<AppState>),
         )
-        .add_systems(OnExit(AppState::MainMenu), cleanup_main_menu)
+        .add_systems(OnExit(AppState::MainMenu), (cleanup_main_menu, stop_bgm))
         .add_systems(
             OnEnter(AppState::LevelSelect),
             (ui::spawn_menu_overlay, stop_bgm, log_state::<AppState>),
         )
         .add_systems(OnExit(AppState::LevelSelect), ui::cleanup_overlay)
-        .add_systems(OnEnter(AppState::Paused), (ui::spawn_menu_overlay, stop_bgm))
+        .add_systems(OnEnter(AppState::Paused), (ui::spawn_menu_overlay, stop_bgm, cleanup_enemy_ambient_sounds))
         .add_systems(
             OnExit(AppState::Paused),
             (ui::cleanup_overlay, resume_bgm_on_unpause),
         )
         .add_systems(
             OnEnter(AppState::LevelComplete),
-            (ui::spawn_menu_overlay, log_state::<AppState>),
+            (ui::spawn_menu_overlay, stop_bgm, cleanup_enemy_ambient_sounds, log_state::<AppState>),
         )
         .add_systems(OnExit(AppState::LevelComplete), ui::cleanup_overlay)
         .add_systems(
             OnEnter(AppState::GameOver),
-            (ui::spawn_menu_overlay, log_state::<AppState>),
+            (ui::spawn_menu_overlay, stop_bgm, cleanup_enemy_ambient_sounds, log_state::<AppState>),
         )
         .add_systems(OnExit(AppState::GameOver), ui::cleanup_overlay)
         .add_systems(

@@ -1,10 +1,16 @@
+use bevy::audio::AudioSink;
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
 
 use crate::app_state::AppState;
-use crate::audio::{is_muted, toggle_mute};
+use crate::audio::{
+    adjust_music_volume, apply_live_music_volume, is_muted, music_volume_percent, toggle_mute,
+    BgmState, MUSIC_VOLUME_STEP,
+};
 use crate::persistence::{GameFont, GameSave};
 use crate::viewport::{self, DESIGN_HEIGHT, DESIGN_WIDTH};
+
+const MENU_ITEM_COUNT: usize = 3;
 
 #[derive(Component)]
 pub struct MenuVisual;
@@ -101,12 +107,27 @@ fn menu_label(selection: &MenuSelection, save: &GameSave) -> String {
     } else {
         "[M] Mute"
     };
-    let body = if selection.index == 0 {
-        "> START\n  SELECT LEVEL"
+    let pct = music_volume_percent(save);
+    let items = [
+        format!("{} START", if selection.index == 0 { ">" } else { " " }),
+        format!(
+            "{} SELECT LEVEL",
+            if selection.index == 1 { ">" } else { " " }
+        ),
+        format!(
+            "{} MUSIC: {pct:>3}%",
+            if selection.index == 2 { ">" } else { " " }
+        ),
+    ];
+    let volume_hint = if selection.index == 2 {
+        "\n\n[< / >] adjust volume"
     } else {
-        "  START\n> SELECT LEVEL"
+        ""
     };
-    format!("{body}\n\n{mute_label}\n\n[Up/Down] navigate  [Enter] confirm")
+    format!(
+        "{}\n\n{mute_label}\n\n[Up/Down] navigate  [Enter] confirm{volume_hint}",
+        items.join("\n")
+    )
 }
 
 pub fn animate_menu_planet(
@@ -155,18 +176,31 @@ pub fn menu_navigate(
     keys: Res<ButtonInput<KeyCode>>,
     mut selection: ResMut<MenuSelection>,
     mut save: ResMut<GameSave>,
+    bgm: Res<BgmState>,
+    sinks: Query<&AudioSink>,
     state: Res<State<AppState>>,
 ) {
     if *state.get() != AppState::MainMenu {
         return;
     }
     if keys.just_pressed(KeyCode::ArrowUp) {
-        selection.index = selection.index.wrapping_sub(1) % 2;
+        selection.index = selection.index.wrapping_sub(1) % MENU_ITEM_COUNT;
     }
     if keys.just_pressed(KeyCode::ArrowDown) {
-        selection.index = (selection.index + 1) % 2;
+        selection.index = (selection.index + 1) % MENU_ITEM_COUNT;
+    }
+    if selection.index == 2 {
+        if keys.just_pressed(KeyCode::ArrowLeft) {
+            adjust_music_volume(&mut save, -MUSIC_VOLUME_STEP);
+            apply_live_music_volume(&save, &bgm, &sinks);
+        }
+        if keys.just_pressed(KeyCode::ArrowRight) {
+            adjust_music_volume(&mut save, MUSIC_VOLUME_STEP);
+            apply_live_music_volume(&save, &bgm, &sinks);
+        }
     }
     if keys.just_pressed(KeyCode::KeyM) {
         toggle_mute(&mut save);
+        apply_live_music_volume(&save, &bgm, &sinks);
     }
 }

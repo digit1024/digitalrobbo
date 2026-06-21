@@ -1,6 +1,6 @@
 use crate::cell::Cell;
 use crate::direction::Direction;
-use crate::element::ElementKind;
+use crate::element::{ElementKind, GunType};
 use crate::tile::TileKind;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -40,6 +40,7 @@ pub enum GameEvent {
     Shot {
         from: Cell,
         direction: Direction,
+        gun_type: GunType,
     },
     Exploded {
         at: Cell,

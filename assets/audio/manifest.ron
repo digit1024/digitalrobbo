@@ -13,7 +13,12 @@
     ],
     sfx: {
         "walk": "audio/sfx/walk.ogg",
-        "shoot": "audio/sfx/shoot.ogg",
+        "shoot_regular": "audio/sfx/shoot_regular.ogg",
+        "shoot_laser": "audio/sfx/shoot_laser.ogg",
+        "shoot_blaster": "audio/sfx/shoot_blaster.ogg",
+        "enemy_bear": "audio/sfx/enemy_bear.ogg",
+        "enemy_bird": "audio/sfx/enemy_bird.ogg",
+        "enemy_butterfly": "audio/sfx/enemy_butterfly.ogg",
         "collected_screw": "audio/sfx/screw.ogg",
         "collected_key": "audio/sfx/key.ogg",
         "collected_ammo": "audio/sfx/ammo.ogg",

@@ -281,12 +281,20 @@ impl World {
 
         if !self.in_bounds(target) {
             self.ammo -= 1;
-            events.push(GameEvent::Shot { from, direction: dir });
+            events.push(GameEvent::Shot {
+                from,
+                direction: dir,
+                gun_type: crate::element::GunType::Regular,
+            });
             return;
         }
 
         self.ammo -= 1;
-        events.push(GameEvent::Shot { from, direction: dir });
+        events.push(GameEvent::Shot {
+            from,
+            direction: dir,
+            gun_type: crate::element::GunType::Regular,
+        });
 
         if self.tile_at(target).is_some_and(|t| t.blocks_shot()) {
             return;

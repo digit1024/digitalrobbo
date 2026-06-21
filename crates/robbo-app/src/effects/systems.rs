@@ -36,7 +36,7 @@ pub fn fx_on_core_events(
             GameEvent::Exploded { at } | GameEvent::Revealed { at } => {
                 spawn_explosion_burst(&mut commands, &projection, level_root, *at, tile);
             }
-            GameEvent::Shot { from, direction } => {
+            GameEvent::Shot { from, direction, .. } => {
                 spawn_shot_trail(&mut commands, &projection, level_root, *from, *direction, tile);
             }
             GameEvent::Collected { kind, at } if is_collect_pop_kind(kind) => {

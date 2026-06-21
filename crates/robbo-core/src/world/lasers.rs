@@ -116,7 +116,11 @@ impl World {
             GunType::Regular => self.place_laser_segment(target, direction, false, source_id),
         }
         if emit_shot {
-            events.push(GameEvent::Shot { from, direction });
+            events.push(GameEvent::Shot {
+                from,
+                direction,
+                gun_type,
+            });
         }
     }
 

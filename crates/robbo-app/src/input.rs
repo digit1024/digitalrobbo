@@ -203,20 +203,22 @@ pub fn keyboard_input(
                 return;
             }
             if keys.just_pressed(KeyCode::Enter) {
-                if menu_selection.index == 0 {
-                    resolve_last_level(&registry, &save, &mut selection);
-                    if let Some(pack) = registry.pack_by_index(selection.pack_index) {
-                        if let Some(level) = pack.levels.get(selection.level_index) {
-                            save.0.profile.last_pack = pack.name.clone();
-                            save.0.profile.last_level = level.index;
-                            persist_save(&save.0);
+                match menu_selection.index {
+                    0 => {
+                        resolve_last_level(&registry, &save, &mut selection);
+                        if let Some(pack) = registry.pack_by_index(selection.pack_index) {
+                            if let Some(level) = pack.levels.get(selection.level_index) {
+                                save.0.profile.last_pack = pack.name.clone();
+                                save.0.profile.last_level = level.index;
+                                persist_save(&save.0);
+                            }
                         }
+                        load_events.send(LoadLevelEvent { restart: false });
+                        begin_playing(&mut cooldown);
+                        next.set(AppState::Playing);
                     }
-                    load_events.send(LoadLevelEvent { restart: false });
-                    begin_playing(&mut cooldown);
-                    next.set(AppState::Playing);
-                } else {
-                    next.set(AppState::LevelSelect);
+                    1 => next.set(AppState::LevelSelect),
+                    _ => {}
                 }
             }
         }
@@ -311,7 +313,8 @@ pub fn keyboard_input(
         }
         AppState::GameOver => {
             if keys.just_pressed(KeyCode::KeyR) {
-                load_events.send(LoadLevelEvent { restart: true });
+                load_events.send(LoadLevelEvent { restart: false });
+                begin_playing(&mut cooldown);
                 next.set(AppState::Playing);
             } else if keys.just_pressed(KeyCode::Escape) || keys.just_pressed(KeyCode::Enter) {
                 next.set(AppState::LevelSelect);

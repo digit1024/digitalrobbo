@@ -1,8 +1,8 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
-use bevy::audio::{AudioPlayer, PlaybackSettings, Volume};
+use bevy::audio::{AudioPlayer, AudioSink, AudioSinkPlayback, PlaybackSettings, Volume};
 use bevy::prelude::*;
-use robbo_core::{Cell, ElementKind, GameEvent};
+use robbo_core::{Cell, ElementKind, GameEvent, GunType};
 use serde::Deserialize;
 
 use crate::app_state::AppState;
@@ -68,6 +68,61 @@ pub struct PendingLevelBgm {
     pub path: Option<String>,
 }
 
+#[derive(Resource, Default)]
+pub(crate) struct EnemyAmbientSounds {
+    by_id: HashMap<u32, Entity>,
+}
+
+#[derive(Component)]
+pub(crate) struct EnemyAmbientSound {
+    element_id: u32,
+}
+
+fn shoot_sfx_key(gun_type: GunType) -> &'static str {
+    match gun_type {
+        GunType::Regular => "shoot_regular",
+        GunType::Laser => "shoot_laser",
+        GunType::Blaster => "shoot_blaster",
+    }
+}
+
+fn enemy_ambient_sfx_key(kind: &ElementKind) -> Option<&'static str> {
+    match kind {
+        ElementKind::Bear { .. } | ElementKind::BlackBear { .. } => Some("enemy_bear"),
+        ElementKind::Bird { .. } => Some("enemy_bird"),
+        ElementKind::Butterfly => Some("enemy_butterfly"),
+        _ => None,
+    }
+}
+
+fn spatial_sfx_volume(save: &GameSave, source: Cell, listener: Option<Cell>) -> Option<f32> {
+    let base = effective_sfx_volume(save);
+    if base <= 0.001 {
+        return None;
+    }
+    let attenuation = match listener {
+        Some(ear) => distance_attenuation(grid_distance(source, ear)),
+        None => 1.0,
+    };
+    if attenuation <= 0.001 {
+        return None;
+    }
+    Some((base * attenuation).clamp(0.0, 1.0))
+}
+
+fn clear_enemy_ambient_sounds(commands: &mut Commands, pool: &mut EnemyAmbientSounds) {
+    for entity in pool.by_id.drain().map(|(_, e)| e) {
+        commands.entity(entity).despawn();
+    }
+}
+
+pub(crate) fn cleanup_enemy_ambient_sounds(
+    mut commands: Commands,
+    mut pool: ResMut<EnemyAmbientSounds>,
+) {
+    clear_enemy_ambient_sounds(&mut commands, &mut pool);
+}
+
 pub fn load_audio_manifest(
     mut commands: Commands,
     asset_server: Res<AssetServer>,
@@ -94,6 +149,7 @@ pub fn load_audio_manifest(
     commands.insert_resource(BgmState::default());
     commands.insert_resource(AudioGate::default());
     commands.insert_resource(PendingLevelBgm::default());
+    commands.insert_resource(EnemyAmbientSounds::default());
 }
 
 pub fn unlock_audio_on_input(
@@ -313,7 +369,9 @@ pub fn sfx_on_core_events(
             GameEvent::Moved { entity_id, to, .. } if *entity_id == bridge.world.robbo_id => {
                 Some(("walk", Some(*to)))
             }
-            GameEvent::Shot { from, .. } => Some(("shoot", Some(*from))),
+            GameEvent::Shot { from, gun_type, .. } => {
+                Some((shoot_sfx_key(*gun_type), Some(*from)))
+            }
             GameEvent::Collected { kind, at } => match kind {
                 ElementKind::Screw => Some(("collected_screw", Some(*at))),
                 ElementKind::Key => Some(("collected_key", Some(*at))),
@@ -354,12 +412,119 @@ pub fn is_muted(save: &GameSave) -> bool {
     save.0.settings.music_volume < 0.001 && save.0.settings.sfx_volume < 0.001
 }
 
+pub const MUSIC_VOLUME_STEP: f32 = 0.1;
+
+pub fn adjust_music_volume(save: &mut GameSave, delta: f32) {
+    let s = &mut save.0.settings;
+    let new = (s.music_volume + delta).clamp(0.0, 1.0);
+    s.music_volume = new;
+    s.stored_music_volume = new;
+    persist_save(&save.0);
+}
+
+pub fn music_volume_percent(save: &GameSave) -> u8 {
+    (save.0.settings.music_volume.clamp(0.0, 1.0) * 100.0).round() as u8
+}
+
+/// Apply saved music level to the currently playing BGM entity, if any.
+pub fn apply_live_music_volume(save: &GameSave, bgm: &BgmState, sinks: &Query<&AudioSink>) {
+    let Some(entity) = bgm.entity else {
+        return;
+    };
+    let Ok(sink) = sinks.get(entity) else {
+        return;
+    };
+    sink.set_volume(effective_music_volume(save));
+}
+
 pub fn play_countdown_tick(
     commands: &mut Commands,
     audio: &GameAudio,
     save: &GameSave,
 ) {
     play_sfx(commands, audio, save, "countdown", None, None);
+}
+
+/// Per-enemy looping ambient SFX with distance falloff from Robbo.
+pub(crate) fn update_enemy_ambient_sounds(
+    mut commands: Commands,
+    mut pool: ResMut<EnemyAmbientSounds>,
+    mut load_events: EventReader<LoadLevelEvent>,
+    bridge: Res<CoreBridge>,
+    audio: Res<GameAudio>,
+    save: Res<GameSave>,
+    gate: Res<AudioGate>,
+    state: Res<State<AppState>>,
+    countdown: Res<LevelCountdown>,
+    sinks: Query<(&EnemyAmbientSound, &AudioSink)>,
+) {
+    for _ in load_events.read() {
+        clear_enemy_ambient_sounds(&mut commands, &mut pool);
+    }
+
+    let active = *state.get() == AppState::Playing && gate.unlocked && !countdown.active;
+    if !active {
+        if !pool.by_id.is_empty() {
+            clear_enemy_ambient_sounds(&mut commands, &mut pool);
+        }
+        return;
+    }
+
+    let listener = bridge.world.robbo_cell();
+    let mut live_ids = HashSet::new();
+
+    for (cell, el) in &bridge.world.elements {
+        let Some(key) = enemy_ambient_sfx_key(&el.kind) else {
+            continue;
+        };
+        if el.hidden {
+            continue;
+        }
+        live_ids.insert(el.id);
+
+        if pool.by_id.contains_key(&el.id) {
+            continue;
+        }
+        let Some(vol) = spatial_sfx_volume(&save, *cell, listener) else {
+            continue;
+        };
+        let Some(handle) = audio.sfx.get(key) else {
+            continue;
+        };
+        let entity = commands
+            .spawn((
+                AudioPlayer::new(handle.clone()),
+                PlaybackSettings::LOOP.with_volume(Volume::new(vol)),
+                EnemyAmbientSound {
+                    element_id: el.id,
+                },
+            ))
+            .id();
+        pool.by_id.insert(el.id, entity);
+    }
+
+    pool.by_id.retain(|id, entity| {
+        if live_ids.contains(id) {
+            true
+        } else {
+            commands.entity(*entity).despawn();
+            false
+        }
+    });
+
+    for (marker, sink) in &sinks {
+        let Some((cell, _)) = bridge
+            .world
+            .elements
+            .iter()
+            .find(|(_, s)| s.id == marker.element_id)
+            .map(|(c, s)| (*c, s))
+        else {
+            continue;
+        };
+        let vol = spatial_sfx_volume(&save, cell, listener).unwrap_or(0.0);
+        sink.set_volume(vol);
+    }
 }
 
 #[cfg(test)]
@@ -382,6 +547,32 @@ mod tests {
     #[test]
     fn attenuation_linear_mid_range() {
         assert!((distance_attenuation(8) - 0.5).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn shoot_sfx_keys_per_gun_type() {
+        assert_eq!(shoot_sfx_key(GunType::Regular), "shoot_regular");
+        assert_eq!(shoot_sfx_key(GunType::Laser), "shoot_laser");
+        assert_eq!(shoot_sfx_key(GunType::Blaster), "shoot_blaster");
+    }
+
+    #[test]
+    fn enemy_ambient_keys() {
+        assert_eq!(
+            enemy_ambient_sfx_key(&ElementKind::Bear { clockwise: true }),
+            Some("enemy_bear")
+        );
+        assert_eq!(
+            enemy_ambient_sfx_key(&ElementKind::Bird {
+                variant: robbo_core::BirdVariant::Horizontal,
+                shooting: false,
+            }),
+            Some("enemy_bird")
+        );
+        assert_eq!(
+            enemy_ambient_sfx_key(&ElementKind::Butterfly),
+            Some("enemy_butterfly")
+        );
     }
 
     #[test]
