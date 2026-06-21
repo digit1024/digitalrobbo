@@ -93,27 +93,27 @@ impl SpriteAssets {
     pub fn for_element(&self, kind: &ElementKind, dir: Direction) -> Handle<Image> {
         let dir_idx = dir_to_idx(dir);
         match kind {
-            // Initial spawn image — update_robbo_sprite refreshes this every frame.
-            ElementKind::Robbo             => self.player[dir_idx][0].clone(),
-            ElementKind::Screw             => self.screw.clone(),
-            ElementKind::Capsule           => self.capsule.clone(),
-            ElementKind::Bomb              => self.bomb.clone(),
-            ElementKind::Box               => self.bx.clone(),
-            ElementKind::PushBox           => self.push_box.clone(),
-            ElementKind::Key               => self.key.clone(),
-            ElementKind::BulletPickup      => self.bullet_pickup.clone(),
-            ElementKind::ExtraLife         => self.extra_life.clone(),
-            ElementKind::QuestionMark      => self.question_mark.clone(),
+            ElementKind::Robbo => self.player[dir_idx][0].clone(),
+            ElementKind::Screw => self.screw.clone(),
+            ElementKind::Capsule => self.capsule.clone(),
+            ElementKind::Bomb => self.bomb.clone(),
+            ElementKind::Box => self.bx.clone(),
+            ElementKind::PushBox => self.push_box.clone(),
+            ElementKind::Key => self.key.clone(),
+            ElementKind::BulletPickup => self.bullet_pickup.clone(),
+            ElementKind::QuestionMark { .. } => self.question_mark.clone(),
             ElementKind::Projectile { .. } => self.projectile.clone(),
-            ElementKind::Teleport { .. }   => self.teleport.clone(),
-            ElementKind::Magnet { .. }     => self.magnet.clone(),
-            ElementKind::Bear { .. }       => self.bear[dir_idx].clone(),
-            ElementKind::BlackBear { .. }  => self.blackbear[dir_idx].clone(),
-            ElementKind::Butterfly         => self.butterfly[dir_idx].clone(),
-            ElementKind::Bird { .. }       => self.bird.clone(),
-            ElementKind::Gun { direction, .. } => {
-                self.gun[dir_to_idx(*direction)].clone()
-            }
+            ElementKind::Teleport { .. } => self.teleport.clone(),
+            ElementKind::Magnet { .. } => self.magnet.clone(),
+            ElementKind::Bear { .. } => self.bear[dir_idx].clone(),
+            ElementKind::BlackBear { .. } => self.blackbear[dir_idx].clone(),
+            ElementKind::Butterfly => self.butterfly[dir_idx].clone(),
+            ElementKind::Bird { .. } => self.bird.clone(),
+            ElementKind::Gun { direction, .. } => self.gun[dir_to_idx(*direction)].clone(),
+            ElementKind::Laser { .. } | ElementKind::BlasterCell { .. } => self.projectile.clone(),
+            ElementKind::BigBoom { .. } => self.bomb.clone(),
+            ElementKind::BarbedWire => self.tile_wall_black.clone(),
+            ElementKind::Stop => self.tile_empty.clone(),
         }
     }
 
@@ -128,6 +128,7 @@ impl SpriteAssets {
             TileKind::Ground      => self.tile_ground.clone(),
             TileKind::DoorClosed | TileKind::DoorOpen => self.tile_door_closed.clone(),
             TileKind::Barrier     => self.tile_barrier.clone(),
+            TileKind::Stop        => self.tile_wall_red.clone(),
         })
     }
 }

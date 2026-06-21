@@ -1,7 +1,7 @@
 # 03 — Core Simulation
 
 > **Status:** Draft  
-> **Last updated:** M-DOC
+> **Last updated:** 2025-06
 
 ## Principles
 
@@ -43,13 +43,21 @@ impl World {
 
 ## Tick model
 
-- **Player phase:** apply `PlayerInput` (move, push, shoot, or wait).
-- **Projectile phase:** advance shots; resolve collisions.
-- **Enemy phase:** bears, birds, butterflies per original delay rules.
-- **Environment phase:** bombs, teleports, questionmarks, doors.
-- **Win check:** screws collected ≥ required → capsule opens; Robbo on capsule → complete.
+DigitalRobbo matches **gnurobbo puzzle rules**, not frame-accurate `DELAY_*` cycle counts. Environment and enemy timing use `World::tick` with modulo intervals (e.g. bears `% 4`, guns `% 8` with 1/8 fire roll). Robbo still gets one move or shoot per player step.
 
-Enemy timing and AI ported from gnurobbo reference (`screen.c` behaviour).
+Per-tick pipeline (after player input):
+
+1. **Pending spawns** — BigBoom countdown → reveal question-mark content  
+2. **Projectiles** — advance and collide  
+3. **Lasers / blasters** — beam extension, orphan cleanup, contact damage  
+4. **Push boxes** — slide every 4 ticks while `sliding`  
+5. **Enemies** — bears, birds, butterflies  
+6. **Guns** — move, rotate, fire  
+7. **Barriers** — conveyor shift every 4 ticks  
+8. **Magnets** — lock + pull Robbo  
+9. **Delayed bombs** — blaster-triggered detonations  
+
+Visual-only delays (teleport shimmer, reveal crack) live in `robbo-app` and do not block core state.
 
 ## Undo / redo
 
@@ -59,14 +67,14 @@ Enemy timing and AI ported from gnurobbo reference (`screen.c` behaviour).
 
 Implemented in `robbo-core` as `CommandHistory`; `robbo-app` triggers on keybind.
 
-## Determinism testing
-
-- Run fixed command sequence; hash serialized world state.
-- Same sequence must produce identical hash across runs and platforms.
-- No `SystemTime`, no thread RNG in core.
-
 ## Coordinate system
 
 - Origin: top-left of level grid.
 - `col` increases right; `row` increases down.
 - Level sizes: 16×31 or 32×31 (from pack metadata).
+
+## Determinism testing
+
+- Run fixed command sequence; hash serialized world state.
+- Same sequence must produce identical hash across runs and platforms.
+- No `SystemTime`, no thread RNG in core.

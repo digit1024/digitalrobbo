@@ -139,7 +139,7 @@ pub fn sync_visuals(
     if !bridge.events_queue.is_empty() {
         for event in &bridge.events_queue {
             match event {
-                GameEvent::Exploded { at } => {
+                GameEvent::Exploded { at } | GameEvent::Revealed { at } => {
                     spawn_explosion_effect(
                         &mut commands,
                         &projection,
@@ -363,6 +363,7 @@ fn fallback_tile_color(tile: TileKind) -> Color {
         TileKind::Ground    => Color::srgb(0.49, 0.31, 0.2),
         TileKind::DoorClosed | TileKind::DoorOpen => Color::srgb(0.6, 0.4, 0.2),
         TileKind::Barrier   => Color::srgb(0.9, 0.5, 0.13),
+        TileKind::Stop      => Color::srgb(0.8, 0.1, 0.1),
     }
 }
 
@@ -378,10 +379,16 @@ fn fallback_entity_color(kind: &robbo_core::ElementKind) -> Color {
         ElementKind::Bird { .. }        => Color::srgb(0.9, 0.9, 0.9),
         ElementKind::Butterfly          => Color::srgb(0.9, 0.4, 0.9),
         ElementKind::Projectile { .. }  => Color::srgb(1.0, 0.9, 0.2),
-        ElementKind::QuestionMark       => Color::srgb(0.8, 0.2, 0.8),
+        ElementKind::QuestionMark { .. } => Color::srgb(0.8, 0.2, 0.8),
         ElementKind::Gun { .. }         => Color::srgb(0.5, 0.5, 0.5),
         ElementKind::Magnet { .. }      => Color::srgb(0.2, 0.6, 0.9),
         ElementKind::Teleport { .. }    => Color::srgb(0.3, 0.9, 0.9),
+        ElementKind::Laser { .. } | ElementKind::BlasterCell { .. } => {
+            Color::srgb(1.0, 0.2, 0.2)
+        }
+        ElementKind::BigBoom { .. }   => Color::srgb(1.0, 0.5, 0.1),
+        ElementKind::BarbedWire         => Color::srgb(0.4, 0.8, 0.2),
+        ElementKind::Stop               => Color::srgb(0.8, 0.1, 0.1),
         _                               => Color::srgb(0.7, 0.7, 0.7),
     }
 }

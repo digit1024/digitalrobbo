@@ -1,67 +1,71 @@
 # 07 — Element Catalog
 
 > **Status:** Draft  
-> **Last updated:** M-DOC
+> **Last updated:** 2025-06
 
-Parity reference for GNU Robbo / Atari Robbo. Update **Implemented** column each milestone.
+Parity reference for GNU Robbo 0.65.6 / Atari Robbo. **Implemented** reflects `robbo-core` behaviour (Robbo move/shoot timing uses our instant-per-step model, not gnurobbo `DELAY_*` cycles).
 
 ## Player
 
 | Element | Behaviour | Tick rules | Implemented |
 |---------|-----------|------------|-------------|
-| Robbo | Move 4-dir, push boxes, shoot | One cell per input step | M1 |
-| Robbo death | Touch hazard/enemy/projectile | Immediate fail or respawn | M4 |
+| Robbo | Move 4-dir, push boxes, shoot | One cell per input step (no gnurobbo cooldown) | Yes |
+| Robbo death | Touch hazard/enemy/projectile/laser | Immediate fail | Yes |
 
 ## Terrain
 
 | Element | Behaviour | Implemented |
 |---------|-----------|-------------|
-| Empty `.` | Walkable | M1 |
-| Walls `O/o/-Q/s` | Block movement and shots | M1 |
-| Ground `H` | Walkable; may affect visuals | M4 |
-| Door `D` | Blocks until key collected | M4 |
-| Barrier `=` | Energetic barrier entry/exit | M4 |
+| Empty `.` | Walkable | Yes |
+| Walls `O/o/-Q/s` | Block movement and shots | Yes |
+| Ground `H` | Blocks movement; shootable/destroyable | Yes |
+| Door `D` | Blocks until key; opens per-door on step (key consumed, Robbo stays) | Yes |
+| STOP `X` | Walk clears tile to empty | Yes |
+| Barrier `=` | Conveyor row shift every 4 ticks | Yes |
 
 ## Collectibles
 
 | Element | Behaviour | Implemented |
 |---------|-----------|-------------|
-| Screw `T` | Required count to open capsule | M1 |
-| Key `%` | Opens doors | M4 |
-| Bullet `'` | Ammo pickup | M1 |
-| Life `+` | Extra life (if lives enabled) | M4 |
-| Capsule `!` | Exit when screws met; Robbo enters to win | M1 |
+| Screw `T` | Required count to open capsule | Yes |
+| Key `%` | Collected only; used when stepping on doors | Yes |
+| Bullet `'` | +9 ammo per pickup | Yes |
+| Life `+` | Stripped to empty at load (gnurobbo parity) | Yes |
+| Capsule `!` | Exit when screws met; Robbo enters to win | Yes |
 
 ## Pushables / hazards
 
 | Element | Behaviour | Implemented |
 |---------|-----------|-------------|
-| Box `#` | Pushable; blocks | M1 |
-| Push box `~` | Pushable variant | M4 |
-| Bomb `b` | Explodes; chain reaction | M4 |
-| Questionmark `?` | Reveals hidden item | M4 |
+| Box `#` | Pushable; blocks | Yes |
+| Push box `~` | Push then slides every 4 ticks; shoots when blocked | Yes |
+| Bomb `b` | 3×3 explosion; chain reaction | Yes |
+| Questionmark `?` | Pushable; shot → BigBoom → reveal; bomb destroys without reveal | Yes |
+| Barbed wire `k` | Walk clears + kills Robbo | Yes |
 
 ## Enemies
 
 | Element | Behaviour | Implemented |
 |---------|-----------|-------------|
-| Bear `@` | Wall-following CW/CCW | M4 |
-| Black bear `*` | Faster wall-follower | M4 |
-| Bird `^` | Patrol / vertical / firing variants | M4 |
-| Butterfly `V` | Random movement pattern | M4 |
+| Bear `@` | Wall-following CW/CCW; every 4 ticks | Yes |
+| Black bear `*` | Faster wall-follower | Yes |
+| Bird `^` | Patrol; optional 1/8 shoot per bird tick | Yes |
+| Butterfly `V` | Homing toward Robbo (1/8 random dir) | Yes |
 
 ## Mechanics
 
 | Element | Behaviour | Implemented |
 |---------|-----------|-------------|
-| Gun `}` | Laser/blaster/regular; fixed/rotating/moving | M4 |
-| Magnet `M` | Pulls Robbo directionally | M4 |
-| Teleport `&` | Paired numbered portals | M4 |
-| Projectile | From Robbo or guns; collision rules | M1/M4 |
+| Gun `}` | Regular/laser/blaster; movable/rotating; 1/8 fire on gun ticks | Yes |
+| Laser `L`/`l` | Beam segments; gun-linked orphan cleanup | Yes |
+| Blaster | Spread cells; destroys most objects | Yes |
+| Magnet `M` | Locks Robbo; pulls 1 cell/tick toward magnet | Yes |
+| Teleport `&` | Ring lookup by group+index; exit-direction search | Yes |
+| Projectile | From Robbo or guns; full collision set | Yes |
 
 ## Win / lose
 
 | Condition | Rule | Implemented |
 |-----------|------|-------------|
-| Win | Required screws collected + Robbo on capsule | M1 |
-| Lose | Robbo dies (hazard/enemy/explosion) | M4 |
+| Win | Required screws collected + Robbo on capsule | Yes |
+| Lose | Robbo dies (hazard/enemy/explosion/laser) | Yes |

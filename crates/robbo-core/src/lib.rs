@@ -11,7 +11,10 @@ mod world;
 pub use cell::Cell;
 pub use command::CommandHistory;
 pub use direction::Direction;
-pub use element::{BirdVariant, ElementKind, ElementState, GunType};
+pub use element::{
+    next_rand, roll_one_in_eight, BirdVariant, ElementKind, ElementState, GunType,
+    QuestionMarkContent,
+};
 pub use events::{DeathCause, GameEvent, PlayerInput};
 pub use tile::TileKind;
 pub use world::{LevelStatus, World};

@@ -1,17 +1,20 @@
-use robbo_core::{Cell, Direction, ElementKind, ElementState, GunType, TileKind};
+use robbo_core::{
+    Cell, Direction, ElementKind, ElementState, GunType, QuestionMarkContent, TileKind,
+};
 use crate::error::{FormatError, FormatResult};
 
 pub fn char_to_tile(c: char) -> FormatResult<TileKind> {
     match c {
-        '.' | ',' => Ok(TileKind::Empty),
+        '.' | ',' | '+' => Ok(TileKind::Empty),
         'O' | 'q' => Ok(TileKind::WallGrey),
         'o' => Ok(TileKind::WallGreen),
-        '-' | 'a' | 'L' | 'l' | 'k' => Ok(TileKind::WallBlack),
+        '-' | 'a' => Ok(TileKind::WallBlack),
         'Q' => Ok(TileKind::WallRed),
-        's' | 'S' | 'p' | 'P' | 'X' => Ok(TileKind::WallSolid),
+        's' | 'S' | 'p' | 'P' => Ok(TileKind::WallSolid),
         'H' => Ok(TileKind::Ground),
         'D' => Ok(TileKind::DoorClosed),
         '=' => Ok(TileKind::Barrier),
+        'X' => Ok(TileKind::Stop),
         _ => Err(FormatError::UnknownChar(c)),
     }
 }
@@ -25,24 +28,40 @@ pub fn char_to_element(c: char) -> FormatResult<Option<(ElementKind, Direction)>
         '~' => ElementKind::PushBox,
         '%' => ElementKind::Key,
         'b' | 'B' => ElementKind::Bomb,
-        '?' => ElementKind::QuestionMark,
+        '?' => ElementKind::QuestionMark {
+            content: QuestionMarkContent::Screw,
+        },
         '!' => ElementKind::Capsule,
-        '+' => ElementKind::ExtraLife,
         '@' => ElementKind::Bear { clockwise: false },
         '*' => ElementKind::BlackBear { clockwise: true },
         '^' => ElementKind::Bird {
             variant: robbo_core::BirdVariant::Horizontal,
+            shooting: false,
         },
         'V' => ElementKind::Butterfly,
-        '&' => ElementKind::Teleport { id: 0 },
+        '&' => ElementKind::Teleport {
+            group: 0,
+            pair_index: 0,
+        },
         '}' => ElementKind::Gun {
             gun_type: GunType::Regular,
             direction: Direction::Right,
+            move_dir: Direction::Right,
             movable: false,
             rotatable: false,
+            random_rotate: false,
         },
         'M' => ElementKind::Magnet {
             direction: Direction::Left,
+        },
+        'k' => ElementKind::BarbedWire,
+        'L' => ElementKind::Laser {
+            direction: Direction::Right,
+            source_id: None,
+        },
+        'l' => ElementKind::Laser {
+            direction: Direction::Down,
+            source_id: None,
         },
         _ => return Ok(None),
     };
@@ -50,8 +69,11 @@ pub fn char_to_element(c: char) -> FormatResult<Option<(ElementKind, Direction)>
 }
 
 pub fn tile_or_element(c: char) -> FormatResult<(TileKind, Option<ElementState>)> {
+    if c == '+' {
+        return Ok((TileKind::Empty, None));
+    }
     if let Ok(tile) = char_to_tile(c) {
-        if tile != TileKind::Empty && tile != TileKind::Ground {
+        if !matches!(tile, TileKind::Empty | TileKind::Ground) {
             return Ok((tile, None));
         }
     }
@@ -61,16 +83,9 @@ pub fn tile_or_element(c: char) -> FormatResult<(TileKind, Option<ElementState>)
         } else {
             TileKind::Empty
         };
-        return Ok((
-            tile,
-            Some(ElementState {
-                id: 0,
-                kind: kind.clone(),
-                direction,
-                tick_counter: 0,
-                hidden: matches!(kind, ElementKind::QuestionMark),
-            }),
-        ));
+        let mut state = ElementState::new(0, kind.clone(), direction);
+        state.hidden = matches!(kind, ElementKind::QuestionMark { .. });
+        return Ok((tile, Some(state)));
     }
     char_to_tile(c).map(|t| (t, None))
 }
@@ -119,24 +134,39 @@ pub fn apply_additional_line(elements: &mut [(Cell, ElementState)], line: &str) 
 
     match ch {
         '&' if parts.len() >= 5 => {
-            if let Ok(id) = parts[4].parse::<u8>() {
-                elements[idx].1.kind = ElementKind::Teleport { id };
-            }
+            let group = parts[3].parse::<u8>().unwrap_or(0);
+            let pair_index = parts[4].parse::<i8>().unwrap_or(0);
+            elements[idx].1.kind = ElementKind::Teleport {
+                group,
+                pair_index,
+            };
+        }
+        'L' | 'l' if parts.len() >= 4 => {
+            let dir = direction_from_gnurobbo(parts[3].parse().unwrap_or(0));
+            elements[idx].1.kind = ElementKind::Laser {
+                direction: dir,
+                source_id: None,
+            };
+            elements[idx].1.direction = dir;
         }
         '}' if parts.len() >= 5 => {
             let dir = direction_from_gnurobbo(parts[3].parse().unwrap_or(0));
+            let move_dir = direction_from_gnurobbo(parts[4].parse().unwrap_or(0));
             let gun_type = if parts.len() >= 6 {
-                gun_type_from_gnurobbo(parts[4].parse().unwrap_or(0))
+                gun_type_from_gnurobbo(parts[5].parse().unwrap_or(0))
             } else {
                 GunType::Regular
             };
-            let movable = parts.len() >= 7 && parts[5] == "1";
-            let rotatable = parts.len() >= 8 && parts[6] == "1";
+            let movable = parts.len() >= 7 && parts[6] == "1";
+            let rotatable = parts.len() >= 8 && parts[7] == "1";
+            let random_rotate = parts.len() >= 9 && parts[8] == "1";
             elements[idx].1.kind = ElementKind::Gun {
                 gun_type,
                 direction: dir,
+                move_dir,
                 movable,
                 rotatable,
+                random_rotate,
             };
             elements[idx].1.direction = dir;
         }
@@ -152,19 +182,33 @@ pub fn apply_additional_line(elements: &mut [(Cell, ElementState)], line: &str) 
         }
         '^' if parts.len() >= 4 => {
             let dir = direction_from_gnurobbo(parts[3].parse().unwrap_or(0));
-            let variant = if parts.len() >= 6 && parts[5] == "1" {
+            let shot_dir = if parts.len() >= 5 {
+                direction_from_gnurobbo(parts[4].parse().unwrap_or(0))
+            } else {
+                dir
+            };
+            let shooting = parts.len() >= 6 && parts[5] == "1";
+            let variant = if shooting {
                 robbo_core::BirdVariant::Firing
             } else if dir == Direction::Up || dir == Direction::Down {
                 robbo_core::BirdVariant::Vertical
             } else {
                 robbo_core::BirdVariant::Horizontal
             };
-            elements[idx].1.kind = ElementKind::Bird { variant };
+            elements[idx].1.kind = ElementKind::Bird {
+                variant,
+                shooting,
+            };
             elements[idx].1.direction = dir;
+            elements[idx].1.shot_direction = shot_dir;
         }
         'M' if parts.len() >= 4 => {
             let dir = direction_from_gnurobbo(parts[3].parse().unwrap_or(0));
             elements[idx].1.kind = ElementKind::Magnet { direction: dir };
+            elements[idx].1.direction = dir;
+        }
+        '=' if parts.len() >= 4 => {
+            let dir = direction_from_gnurobbo(parts[3].parse().unwrap_or(0));
             elements[idx].1.direction = dir;
         }
         _ => {}
@@ -182,6 +226,7 @@ pub fn tile_to_char(tile: TileKind) -> char {
         TileKind::Ground => 'H',
         TileKind::DoorClosed | TileKind::DoorOpen => 'D',
         TileKind::Barrier => '=',
+        TileKind::Stop => 'X',
     }
 }
 
@@ -194,9 +239,8 @@ pub fn element_to_char(kind: &ElementKind) -> char {
         ElementKind::PushBox => '~',
         ElementKind::Key => '%',
         ElementKind::Bomb => 'b',
-        ElementKind::QuestionMark => '?',
+        ElementKind::QuestionMark { .. } => '?',
         ElementKind::Capsule => '!',
-        ElementKind::ExtraLife => '+',
         ElementKind::Bear { .. } => '@',
         ElementKind::BlackBear { .. } => '*',
         ElementKind::Bird { .. } => '^',
@@ -205,9 +249,61 @@ pub fn element_to_char(kind: &ElementKind) -> char {
         ElementKind::Gun { .. } => '}',
         ElementKind::Magnet { .. } => 'M',
         ElementKind::Projectile { .. } => '.',
+        ElementKind::Laser { direction, .. } => match direction {
+            Direction::Down | Direction::Up => 'l',
+            _ => 'L',
+        },
+        ElementKind::BlasterCell { .. } => '.',
+        ElementKind::BigBoom { .. } => '.',
+        ElementKind::BarbedWire => 'k',
+        ElementKind::Stop => 'X',
     }
 }
 
 pub fn cell_from_grid(col: usize, row: usize) -> Cell {
     Cell::new(col as i16, row as i16)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn teleport_additional_parses_group_and_index() {
+        let mut elements = vec![(
+            Cell::new(3, 1),
+            ElementState::new(
+                1,
+                ElementKind::Teleport {
+                    group: 0,
+                    pair_index: 0,
+                },
+                Direction::Down,
+            ),
+        )];
+        apply_additional_line(&mut elements, "3.1.&.1.0");
+        assert!(matches!(
+            elements[0].1.kind,
+            ElementKind::Teleport {
+                group: 1,
+                pair_index: 0
+            }
+        ));
+        apply_additional_line(&mut elements, "12.11.&.3.1");
+        // cell not in list — no panic
+    }
+
+    #[test]
+    fn plus_is_empty_tile() {
+        let (tile, el) = tile_or_element('+').unwrap();
+        assert_eq!(tile, TileKind::Empty);
+        assert!(el.is_none());
+    }
+
+    #[test]
+    fn barbed_wire_is_element() {
+        let (tile, el) = tile_or_element('k').unwrap();
+        assert_eq!(tile, TileKind::Empty);
+        assert!(matches!(el.unwrap().kind, ElementKind::BarbedWire));
+    }
 }

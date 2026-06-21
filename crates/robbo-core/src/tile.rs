@@ -12,10 +12,27 @@ pub enum TileKind {
     DoorClosed,
     DoorOpen,
     Barrier,
+    /// gnurobbo STOP (`X`) — walk clears to empty.
+    Stop,
 }
 
 impl TileKind {
     pub fn blocks_movement(self) -> bool {
+        matches!(
+            self,
+            TileKind::WallGrey
+                | TileKind::WallGreen
+                | TileKind::WallBlack
+                | TileKind::WallRed
+                | TileKind::WallSolid
+                | TileKind::Ground
+                | TileKind::DoorClosed
+                | TileKind::Barrier
+                | TileKind::Stop
+        )
+    }
+
+    pub fn blocks_shot(self) -> bool {
         matches!(
             self,
             TileKind::WallGrey
@@ -28,7 +45,7 @@ impl TileKind {
         )
     }
 
-    pub fn blocks_shot(self) -> bool {
-        self.blocks_movement()
+    pub fn is_barrier(self) -> bool {
+        matches!(self, TileKind::Barrier)
     }
 }

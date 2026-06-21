@@ -1,4 +1,6 @@
-use robbo_core::{Cell, ElementState, TileKind, World};
+use std::collections::HashMap;
+
+use robbo_core::{Cell, Direction, ElementState, TileKind, World};
 
 use crate::char_map::{apply_additional_line, cell_from_grid, tile_or_element};
 use crate::error::{FormatError, FormatResult};
@@ -21,17 +23,21 @@ pub struct Level {
     pub tiles: Vec<TileKind>,
     pub elements: Vec<(Cell, ElementState)>,
     pub required_screws: u32,
+    pub barrier_directions: HashMap<Cell, Direction>,
 }
 
 impl Level {
     pub fn to_world(&self) -> World {
-        World::from_level(
+        let mut world = World::from_level(
             self.width,
             self.height,
             self.tiles.clone(),
             self.elements.clone(),
             self.required_screws,
-        )
+        );
+        world.barrier_directions = self.barrier_directions.clone();
+        world.init_after_load();
+        world
     }
 }
 
@@ -188,6 +194,33 @@ impl LevelBuilder {
             apply_additional_line(&mut elements, line);
         }
 
+        let mut barrier_directions = HashMap::new();
+        for row in 0..height as i16 {
+            for col in 0..width as i16 {
+                let cell = Cell::new(col, row);
+                let idx = row as usize * width as usize + col as usize;
+                if tiles[idx] == TileKind::Barrier {
+                    barrier_directions.insert(cell, Direction::Right);
+                }
+            }
+        }
+        for line in &self.additional_lines {
+            let parts: Vec<&str> = line.split('.').collect();
+            if parts.len() >= 4 && parts[2] == "=" {
+                if let (Ok(col), Ok(row), Ok(dir)) = (
+                    parts[0].parse::<i16>(),
+                    parts[1].parse::<i16>(),
+                    parts[3].parse::<u8>(),
+                ) {
+                    let cell = Cell::new(col, row);
+                    barrier_directions.insert(
+                        cell,
+                        crate::char_map::direction_from_gnurobbo(dir),
+                    );
+                }
+            }
+        }
+
         let colour = if self.colour == 0 {
             default_colour
         } else {
@@ -204,6 +237,7 @@ impl LevelBuilder {
             tiles,
             elements,
             required_screws: self.screws_override.unwrap_or(screw_count),
+            barrier_directions,
         })
     }
 }
