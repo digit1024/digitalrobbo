@@ -4,6 +4,7 @@ use robbo_core::Direction;
 use crate::app_state::AppState;
 use crate::audio::AudioGate;
 use crate::bridge::{CoreBridge, LoadLevelEvent, ReloadVisualsEvent};
+use crate::game_menus::{dismiss_game_menu, GameMenuRoot};
 use crate::levels::{LevelRegistry, LevelSelection};
 use crate::menu::MenuSelection;
 use crate::persistence::{GameSave, persist_save};
@@ -53,7 +54,7 @@ pub fn tick_input_cooldown(mut cooldown: ResMut<InputCooldown>) {
     }
 }
 
-fn begin_playing(cooldown: &mut InputCooldown) {
+pub(crate) fn begin_playing(cooldown: &mut InputCooldown) {
     cooldown.frames_remaining = 4;
 }
 
@@ -175,6 +176,7 @@ fn update_steering(keys: &ButtonInput<KeyCode>, bridge: &mut CoreBridge, steerin
 }
 
 pub fn keyboard_input(
+    mut commands: Commands,
     keys: Res<ButtonInput<KeyCode>>,
     mut bridge: ResMut<CoreBridge>,
     mut steering: ResMut<SteeringState>,
@@ -189,6 +191,7 @@ pub fn keyboard_input(
     mut save: ResMut<GameSave>,
     mut gate: ResMut<AudioGate>,
     mut cooldown: ResMut<InputCooldown>,
+    menu_roots: Query<Entity, With<GameMenuRoot>>,
 ) {
     if keys.get_just_pressed().next().is_some() {
         gate.unlocked = true;
@@ -255,9 +258,11 @@ pub fn keyboard_input(
                 load_events.send(LoadLevelEvent { restart: false });
                 begin_playing(&mut cooldown);
                 next.set(AppState::Playing);
+                dismiss_game_menu(&mut commands, &menu_roots);
             }
             if keys.just_pressed(KeyCode::Escape) {
                 next.set(AppState::MainMenu);
+                dismiss_game_menu(&mut commands, &menu_roots);
             }
         }
         AppState::Playing => {
@@ -288,11 +293,14 @@ pub fn keyboard_input(
         AppState::Paused => {
             if keys.just_pressed(KeyCode::Escape) {
                 next.set(AppState::Playing);
+                dismiss_game_menu(&mut commands, &menu_roots);
             } else if keys.just_pressed(KeyCode::KeyR) {
                 load_events.send(LoadLevelEvent { restart: true });
                 next.set(AppState::Playing);
+                dismiss_game_menu(&mut commands, &menu_roots);
             } else if keys.just_pressed(KeyCode::KeyQ) {
                 next.set(AppState::LevelSelect);
+                dismiss_game_menu(&mut commands, &menu_roots);
             }
         }
         AppState::LevelComplete => {
@@ -303,21 +311,26 @@ pub fn keyboard_input(
                         load_events.send(LoadLevelEvent { restart: false });
                         begin_playing(&mut cooldown);
                         next.set(AppState::Playing);
+                        dismiss_game_menu(&mut commands, &menu_roots);
                         return;
                     }
                 }
                 next.set(AppState::LevelSelect);
+                dismiss_game_menu(&mut commands, &menu_roots);
             } else if keys.just_pressed(KeyCode::Escape) {
                 next.set(AppState::LevelSelect);
+                dismiss_game_menu(&mut commands, &menu_roots);
             }
         }
         AppState::GameOver => {
             if keys.just_pressed(KeyCode::KeyR) {
-                load_events.send(LoadLevelEvent { restart: false });
+                load_events.send(LoadLevelEvent { restart: true });
                 begin_playing(&mut cooldown);
                 next.set(AppState::Playing);
+                dismiss_game_menu(&mut commands, &menu_roots);
             } else if keys.just_pressed(KeyCode::Escape) || keys.just_pressed(KeyCode::Enter) {
                 next.set(AppState::LevelSelect);
+                dismiss_game_menu(&mut commands, &menu_roots);
             }
         }
     }

@@ -94,6 +94,10 @@ impl World {
                     events.push(GameEvent::LevelComplete);
                     return;
                 }
+                ElementKind::Capsule if !self.capsule_open => {
+                    self.try_push_object(robbo_idx, idx, from, target, dir, events);
+                    return;
+                }
                 ElementKind::Box
                 | ElementKind::PushBox
                 | ElementKind::Bomb

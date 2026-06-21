@@ -5,6 +5,7 @@
 
 mod aura;
 mod collect;
+mod magnet;
 mod particle;
 mod presets;
 mod screw_visual;
@@ -12,5 +13,6 @@ mod systems;
 
 pub use aura::{sync_fx_auras, tick_teleport_auras};
 pub use collect::tick_collect_pop_effects;
+pub use magnet::{clear_magnet_beams_on_reload, update_magnet_beams, update_magnet_visuals, MagnetBeamCache, MagnetVisual};
 pub use screw_visual::{ScrewVisual, update_screw_visuals};
 pub use systems::{fx_on_core_events, tick_fx_particles};

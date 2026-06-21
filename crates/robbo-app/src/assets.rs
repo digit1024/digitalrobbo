@@ -143,6 +143,11 @@ impl SpriteAssets {
     }
 }
 
+/// Z-rotation (radians) for a magnet sprite whose poles face up in the art.
+pub fn magnet_direction_rotation(dir: Direction) -> f32 {
+    bear_direction_rotation(dir)
+}
+
 /// Z-rotation (radians) for a bear sprite whose base art faces up.
 pub fn bear_direction_rotation(dir: Direction) -> f32 {
     match dir {

@@ -41,9 +41,6 @@ impl LevelCountdown {
 }
 
 #[derive(Component)]
-pub struct OverlayText;
-
-#[derive(Component)]
 pub struct CountdownText;
 
 pub fn load_level_system(
@@ -79,6 +76,12 @@ pub fn load_level_system(
         session.pack_name = pack.name.clone();
         session.level_index = selection.level_index;
         session.level_label = format!("{} #{}", pack.name, level.index);
+
+        if ev.restart {
+            session.tries += 1;
+        } else {
+            session.tries = 1;
+        }
 
         timer.elapsed_ms = 0;
         timer.running = false;
@@ -141,112 +144,6 @@ pub fn tick_speedrun_timer(
     }
 }
 
-fn overlay_label(
-    state: &AppState,
-    registry: &LevelRegistry,
-    selection: &LevelSelection,
-    save: &GameSave,
-    timer: &SpeedrunTimer,
-) -> String {
-    match state {
-        AppState::LevelSelect => {
-            let pack = registry.pack_by_index(selection.pack_index);
-            let pack_name = pack.map(|p| p.name.as_str()).unwrap_or("?");
-            let level_count = pack.map(|p| p.levels.len()).unwrap_or(0);
-            let completed = pack
-                .and_then(|p| p.levels.get(selection.level_index))
-                .map(|lvl| {
-                    save.0
-                        .packs
-                        .get(pack_name)
-                        .and_then(|pp| pp.levels.get(&(selection.level_index + 1).to_string()))
-                        .map(|lp| lp.completed)
-                        .unwrap_or(false)
-                        && lvl.index > 0
-                })
-                .unwrap_or(false);
-            let star = if completed { " *DONE*" } else { "" };
-            format!(
-                "LEVEL SELECT\n\nPack:  {}  ({}/{} packs)\nLevel: {} / {}{}\n\n[Up/Down] change pack   [Left/Right] change level\n[Enter] play            [Esc] back",
-                pack_name,
-                selection.pack_index + 1,
-                registry.packs.len(),
-                selection.level_index + 1,
-                level_count,
-                star,
-            )
-        }
-        AppState::Paused => {
-            "PAUSED\n\n[Esc] Resume   [R] Restart   [Q] Level Select".to_string()
-        }
-        AppState::LevelComplete => format!(
-            "LEVEL COMPLETE!\n\nTime: {:.1}s\n\n[N / Enter] Next level   [Esc] Level Select",
-            timer.elapsed_ms as f32 / 1000.0
-        ),
-        AppState::GameOver => "GAME OVER\n\n[R] Retry   [Esc] Level Select".to_string(),
-        _ => String::new(),
-    }
-}
-
-pub fn spawn_menu_overlay(
-    mut commands: Commands,
-    state: Res<State<AppState>>,
-    registry: Res<LevelRegistry>,
-    selection: Res<LevelSelection>,
-    save: Res<GameSave>,
-    timer: Res<SpeedrunTimer>,
-) {
-    let label = overlay_label(state.get(), &registry, &selection, &save, &timer);
-    if !label.is_empty() {
-        commands.spawn((
-            Text::new(label),
-            TextFont {
-                font_size: 24.0,
-                ..default()
-            },
-            TextColor(Color::srgb(0.92, 0.92, 1.0)),
-            Node {
-                position_type: PositionType::Absolute,
-                top: Val::Px(60.0),
-                left: Val::Px(40.0),
-                ..default()
-            },
-            OverlayText,
-        ));
-    }
-}
-
-pub fn update_overlay_text(
-    state: Res<State<AppState>>,
-    registry: Res<LevelRegistry>,
-    selection: Res<LevelSelection>,
-    save: Res<GameSave>,
-    timer: Res<SpeedrunTimer>,
-    mut overlays: Query<&mut Text, With<OverlayText>>,
-) {
-    if overlays.is_empty() {
-        return;
-    }
-    let label = overlay_label(state.get(), &registry, &selection, &save, &timer);
-    for mut text in &mut overlays {
-        if **text != label {
-            **text = label.clone();
-        }
-    }
-}
-
-pub fn cleanup_overlay(mut commands: Commands, q: Query<Entity, With<OverlayText>>) {
-    for e in &q {
-        commands.entity(e).despawn();
-    }
-}
-
-pub fn cleanup_countdown_overlay(mut commands: Commands, q: Query<Entity, With<CountdownText>>) {
-    for e in &q {
-        commands.entity(e).despawn();
-    }
-}
-
 pub fn tick_level_countdown(
     mut commands: Commands,
     time: Res<Time>,
@@ -288,8 +185,15 @@ pub fn tick_level_countdown(
     }
 }
 
+pub fn cleanup_countdown_overlay(mut commands: Commands, q: Query<Entity, With<CountdownText>>) {
+    for e in &q {
+        commands.entity(e).despawn();
+    }
+}
+
 pub fn on_core_events(
     mut reader: EventReader<CoreGameEvent>,
+    state: Res<State<AppState>>,
     mut next: ResMut<NextState<AppState>>,
     mut timer: ResMut<SpeedrunTimer>,
     mut save: ResMut<GameSave>,
@@ -298,6 +202,9 @@ pub fn on_core_events(
     for CoreGameEvent(event) in reader.read() {
         match event {
             GameEvent::LevelComplete => {
+                if *state.get() != AppState::Playing {
+                    continue;
+                }
                 timer.running = false;
                 let key = (session.level_index + 1).to_string();
                 let entry = save
@@ -312,11 +219,17 @@ pub fn on_core_events(
                 if entry.best_time_ms == 0 || timer.elapsed_ms < entry.best_time_ms {
                     entry.best_time_ms = timer.elapsed_ms;
                 }
+                if entry.best_tries == 0 || session.tries < entry.best_tries {
+                    entry.best_tries = session.tries;
+                }
                 persist_save(&save.0);
                 bevy::log::info!("Level complete in {}ms", timer.elapsed_ms);
                 next.set(AppState::LevelComplete);
             }
             GameEvent::LevelFailed => {
+                if *state.get() != AppState::Playing {
+                    continue;
+                }
                 timer.running = false;
                 bevy::log::info!("Level failed");
                 next.set(AppState::GameOver);

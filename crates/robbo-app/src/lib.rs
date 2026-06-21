@@ -5,6 +5,7 @@ mod bridge;
 mod camera;
 mod editor;
 mod effects;
+mod game_menus;
 mod hud;
 mod input;
 mod interpolation;
@@ -35,8 +36,12 @@ use bevy::prelude::*;
 use bevy::winit::{WakeUp, WinitPlugin};
 use bridge::{CoreBridge, EntityMap, GameSession, GameTickTimer, LoadLevelEvent, ReloadVisualsEvent, TileEntityMap};
 use effects::{
-    fx_on_core_events, sync_fx_auras, tick_collect_pop_effects, tick_fx_particles,
-    tick_teleport_auras, update_screw_visuals,
+    clear_magnet_beams_on_reload, fx_on_core_events, sync_fx_auras, tick_collect_pop_effects,
+    tick_fx_particles, tick_teleport_auras, update_magnet_beams, update_magnet_visuals,
+    update_screw_visuals, MagnetBeamCache,
+};
+use game_menus::{
+    cleanup_game_menu, game_menu_button_input, spawn_game_menu, update_level_select_menu,
 };
 use hud::{cleanup_level_hud, hud_button_input, spawn_level_hud, update_level_hud};
 use input::{apply_test_input, InputCooldown, SteeringState, TestInputInject};
@@ -104,6 +109,7 @@ fn configure_app(app: &mut App, allow_any_thread: bool) {
         .insert_resource(SteeringState::default())
         .insert_resource(TestInputInject::default())
         .insert_resource(editor::EditorState::default())
+        .init_resource::<MagnetBeamCache>()
         .add_event::<bridge::CoreGameEvent>()
         .add_event::<LoadLevelEvent>()
         .add_event::<ReloadVisualsEvent>()
@@ -136,7 +142,7 @@ fn configure_app(app: &mut App, allow_any_thread: bool) {
                 ui::tick_speedrun_timer,
                 ui::tick_level_countdown,
                 update_level_hud,
-                ui::update_overlay_text,
+                update_level_select_menu,
                 ui::on_core_events,
             )
                 .chain(),
@@ -152,6 +158,7 @@ fn configure_app(app: &mut App, allow_any_thread: bool) {
                 unlock_audio_on_input,
                 ui_anim::tick_ui_fade,
                 hud_button_input,
+                game_menu_button_input,
                 animate_menu_planet,
                 update_menu_highlight,
                 menu_navigate,
@@ -173,31 +180,47 @@ fn configure_app(app: &mut App, allow_any_thread: bool) {
         .add_systems(OnExit(AppState::MainMenu), (cleanup_main_menu, stop_bgm))
         .add_systems(
             OnEnter(AppState::LevelSelect),
-            (ui::spawn_menu_overlay, stop_bgm, log_state::<AppState>),
+            (spawn_game_menu, stop_bgm, log_state::<AppState>),
         )
-        .add_systems(OnExit(AppState::LevelSelect), ui::cleanup_overlay)
-        .add_systems(OnEnter(AppState::Paused), (ui::spawn_menu_overlay, stop_bgm, cleanup_enemy_ambient_sounds))
+        .add_systems(OnExit(AppState::LevelSelect), cleanup_game_menu)
+        .add_systems(
+            OnEnter(AppState::Paused),
+            (spawn_game_menu, stop_bgm, cleanup_enemy_ambient_sounds),
+        )
         .add_systems(
             OnExit(AppState::Paused),
-            (ui::cleanup_overlay, resume_bgm_on_unpause),
+            (cleanup_game_menu, resume_bgm_on_unpause),
         )
         .add_systems(
             OnEnter(AppState::LevelComplete),
-            (ui::spawn_menu_overlay, stop_bgm, cleanup_enemy_ambient_sounds, log_state::<AppState>),
+            (
+                spawn_game_menu,
+                stop_bgm,
+                cleanup_enemy_ambient_sounds,
+                log_state::<AppState>,
+            ),
         )
-        .add_systems(OnExit(AppState::LevelComplete), ui::cleanup_overlay)
+        .add_systems(OnExit(AppState::LevelComplete), cleanup_game_menu)
         .add_systems(
             OnEnter(AppState::GameOver),
-            (ui::spawn_menu_overlay, stop_bgm, cleanup_enemy_ambient_sounds, log_state::<AppState>),
+            (
+                spawn_game_menu,
+                stop_bgm,
+                cleanup_enemy_ambient_sounds,
+                log_state::<AppState>,
+            ),
         )
-        .add_systems(OnExit(AppState::GameOver), ui::cleanup_overlay)
+        .add_systems(OnExit(AppState::GameOver), cleanup_game_menu)
         .add_systems(
             Update,
             (
+                clear_magnet_beams_on_reload,
                 render::update_robbo_sprite,
                 render::update_entity_sprites,
+                update_magnet_visuals,
                 tick_fx_particles,
                 tick_teleport_auras,
+                update_magnet_beams,
                 tick_collect_pop_effects,
                 render::update_explosion_effects,
                 render::update_tile_vanish_effects,

@@ -31,7 +31,7 @@ Parity reference for GNU Robbo 0.65.6 / Atari Robbo. **Implemented** reflects `r
 | Key `%` | Collected only; used when stepping on doors | Yes |
 | Bullet `'` | +9 ammo per pickup | Yes |
 | Life `+` | Stripped to empty at load (gnurobbo parity) | Yes |
-| Capsule `!` | Exit when screws met; blocks movement (not pushable); Robbo enters open capsule to win | Yes |
+| Capsule `!` | Pushable like a box until screws open it; then Robbo enters to win | Yes |
 
 ## Pushables / hazards
 

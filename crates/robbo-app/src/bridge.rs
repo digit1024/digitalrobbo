@@ -27,6 +27,8 @@ pub struct GameSession {
     pub pack_name: String,
     pub level_index: usize,
     pub level_label: String,
+    /// Attempts this level (1 on fresh load, +1 on each restart).
+    pub tries: u32,
 }
 
 #[derive(Resource, Default)]

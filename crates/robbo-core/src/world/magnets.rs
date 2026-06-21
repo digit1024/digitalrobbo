@@ -1,8 +1,32 @@
+use crate::cell::Cell;
+use crate::direction::Direction;
 use crate::element::ElementKind;
 use crate::events::{DeathCause, GameEvent};
 use crate::world::World;
 
 impl World {
+    /// Cells illuminated by a magnet beam (gnurobbo: stops at walls and any object).
+    pub fn magnet_beam_cells(&self, origin: Cell, direction: Direction) -> Vec<Cell> {
+        let (dc, dr) = direction.delta();
+        let mut path = Vec::new();
+        let mut cursor = origin;
+        loop {
+            let next = cursor.offset(dc, dr);
+            if !self.in_bounds(next) {
+                break;
+            }
+            if self.tile_at(next).is_some_and(|t| t.blocks_movement()) {
+                break;
+            }
+            path.push(next);
+            if self.element_at(next).is_some() {
+                break;
+            }
+            cursor = next;
+        }
+        path
+    }
+
     pub(crate) fn tick_magnets(&mut self, _events: &mut Vec<GameEvent>) {
         if self.robbo_magnet_locked {
             return;

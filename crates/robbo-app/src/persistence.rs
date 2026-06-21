@@ -28,6 +28,8 @@ pub struct PackProgress {
 pub struct LevelProgress {
     pub completed: bool,
     pub best_time_ms: u64,
+    #[serde(default)]
+    pub best_tries: u32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

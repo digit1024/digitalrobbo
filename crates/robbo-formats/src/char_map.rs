@@ -52,7 +52,7 @@ pub fn char_to_element(c: char) -> FormatResult<Option<(ElementKind, Direction)>
             random_rotate: false,
         },
         'M' => ElementKind::Magnet {
-            direction: Direction::Left,
+            direction: Direction::Right,
         },
         'k' => ElementKind::BarbedWire,
         'L' => ElementKind::Laser {
@@ -73,6 +73,7 @@ pub fn char_to_element(c: char) -> FormatResult<Option<(ElementKind, Direction)>
         ElementKind::Bear { .. } | ElementKind::BlackBear { .. } | ElementKind::Bird { .. } => {
             Direction::Right
         }
+        ElementKind::Magnet { direction } => *direction,
         _ => Direction::Down,
     };
     Ok(Some((el, direction)))

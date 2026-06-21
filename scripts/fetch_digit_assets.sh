@@ -23,16 +23,18 @@ slice_atlas() {
     if [[ ! -f "$atlas" ]]; then
         return
     fi
-    if [[ -f "$out_dir/bmideas.png" ]]; then
-        echo "skip atlas slices"
-        return
-    fi
     if ! command -v convert &>/dev/null; then
-        echo "warn: install imagemagick to slice bmideas.png from robbo_atlas.png"
+        echo "warn: install imagemagick to slice ui frames from robbo_atlas.png"
         return
     fi
-    echo "slice atlas frames"
-    convert "$atlas" -crop 623x207+2+368 +repage "$out_dir/bmideas.png"
+    if [[ ! -f "$out_dir/bmideas.png" ]]; then
+        echo "slice bmideas.png"
+        convert "$atlas" -crop 623x207+2+368 +repage "$out_dir/bmideas.png"
+    fi
+    if [[ ! -f "$out_dir/menu_panel.png" ]]; then
+        echo "slice menu_panel.png"
+        convert "$atlas" -crop 844x528+2+839 +repage "$out_dir/menu_panel.png"
+    fi
 }
 
 # ── fonts ─────────────────────────────────────────────────────────────
@@ -40,9 +42,11 @@ fetch "$ROOT/assets/fonts/MarkerFelt.ttf" \
     "$BASE/fonts/Marker%20Felt.ttf"
 
 # ── UI ──────────────────────────────────────────────────────────────────
-for name in space.png planet.png mute.png unmute.png settings.png ribbon.png giveUp.png settingss.png replays.png; do
+for name in space.png planet.png mute.png unmute.png settings.png giveUp.png settingss.png replays.png facebook.png next.png replay.png; do
     fetch "$ROOT/assets/ui/$name" "$BASE/$name"
 done
+fetch "$ROOT/assets/ui/ribbon.png" \
+    "https://raw.githubusercontent.com/digit1024/DigitAdventures/master/cocos2d-x-2.2.6/projects/digit1024/Resources/extensions/ribbon.png"
 
 fetch "$ROOT/assets/ui/robbo_atlas.png" "$BASE/robbo.png"
 slice_atlas
