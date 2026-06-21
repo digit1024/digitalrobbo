@@ -1,73 +1,80 @@
-use std::collections::HashSet;
-
 use crate::cell::Cell;
-use crate::element::ElementKind;
+use crate::element::{bomb_chain_delay_ticks, ElementKind};
 use crate::events::{DeathCause, GameEvent};
 use crate::world::World;
 
 impl World {
-    pub(crate) fn explode_at(&mut self, at: Cell, events: &mut Vec<GameEvent>) {
-        self.explode_at_inner(at, events, 0);
-    }
-
-    fn explode_at_inner(&mut self, at: Cell, events: &mut Vec<GameEvent>, depth: u32) {
-        if depth > 16 || !self.in_bounds(at) {
+    /// Detonate a bomb now — 3×3 blast; neighbor bombs are queued, not exploded instantly.
+    pub(crate) fn detonate_bomb(&mut self, at: Cell, events: &mut Vec<GameEvent>) {
+        if !self.in_bounds(at) {
             return;
         }
-        events.push(GameEvent::Exploded { at });
+        let Some((_, state)) = self.element_at(at) else {
+            return;
+        };
+        if !matches!(state.kind, ElementKind::Bomb) {
+            return;
+        }
 
-        let mut affected = HashSet::new();
+        events.push(GameEvent::Exploded { at });
+        self.remove_element_by_id(state.id);
+        self.apply_bomb_wave(at, events);
+    }
+
+    /// Legacy entry — same as [`detonate_bomb`] (no recursive same-tick chain).
+    pub(crate) fn explode_at(&mut self, at: Cell, events: &mut Vec<GameEvent>) {
+        if self
+            .element_at(at)
+            .is_some_and(|(_, s)| matches!(s.kind, ElementKind::Bomb))
+        {
+            self.detonate_bomb(at, events);
+        } else {
+            // Non-bomb center (shouldn't happen in normal play) — still apply wave.
+            events.push(GameEvent::Exploded { at });
+            self.apply_bomb_wave(at, events);
+        }
+    }
+
+    /// gnurobbo `blow_bomb` — damage 3×3; adjacent bombs get `DELAY_BOMB_TARGET`.
+    fn apply_bomb_wave(&mut self, at: Cell, events: &mut Vec<GameEvent>) {
+        let chain_delay = bomb_chain_delay_ticks();
+
         for dc in -1..=1 {
             for dr in -1..=1 {
-                let n = at.offset(dc, dr);
-                if self.in_bounds(n) {
-                    affected.insert(n);
-                }
-            }
-        }
-
-        let mut chain_bombs = Vec::new();
-        for cell in affected.iter().copied().collect::<Vec<_>>() {
-            if self.robbo_cell() == Some(cell) {
-                self.kill_robbo(DeathCause::Explosion, events);
-            }
-
-            if let Some((_, state)) = self.element_at(cell) {
-                // Solid laser beams are not blowable (gnurobbo `blow_bomb`).
-                if matches!(
-                    state.kind,
-                    ElementKind::Laser {
-                        solid: true,
-                        ..
-                    }
-                ) {
+                let cell = at.offset(dc, dr);
+                if !self.in_bounds(cell) {
                     continue;
                 }
-                if matches!(state.kind, ElementKind::Bomb) {
-                    if !chain_bombs.contains(&cell) {
-                        chain_bombs.push(cell);
+
+                if self.robbo_cell() == Some(cell) {
+                    self.kill_robbo(DeathCause::Explosion, events);
+                }
+
+                if let Some((_, state)) = self.element_at(cell) {
+                    if matches!(
+                        state.kind,
+                        ElementKind::Laser {
+                            solid: true,
+                            ..
+                        }
+                    ) {
+                        continue;
                     }
-                    continue;
+                    if matches!(state.kind, ElementKind::Bomb) {
+                        self.queue_bomb_detonation(cell, chain_delay);
+                        continue;
+                    }
+                    if Self::is_blowable(&state.kind) {
+                        self.remove_element_by_id(state.id);
+                    }
                 }
-                if Self::is_blowable(&state.kind) {
-                    self.remove_element_by_id(state.id);
-                }
-            }
 
-            if let Some(tile) = self.tile_at(cell) {
-                if Self::is_tile_blowable(tile) {
-                    self.clear_blowable_tile(cell, events);
+                if let Some(tile) = self.tile_at(cell) {
+                    if Self::is_tile_blowable(tile) {
+                        self.clear_blowable_tile(cell, events);
+                    }
                 }
             }
-        }
-
-        for cell in chain_bombs {
-            if let Some((_, state)) = self.element_at(cell) {
-                if matches!(state.kind, ElementKind::Bomb) {
-                    self.remove_element_by_id(state.id);
-                }
-            }
-            self.explode_at_inner(cell, events, depth + 1);
         }
     }
 }

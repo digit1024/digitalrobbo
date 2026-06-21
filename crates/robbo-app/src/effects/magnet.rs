@@ -1,5 +1,5 @@
 use bevy::prelude::*;
-use robbo_core::{Direction, ElementKind};
+use robbo_core::{Cell, Direction, ElementKind};
 
 use crate::app_state::AppState;
 use crate::assets::magnet_direction_rotation;
@@ -7,6 +7,8 @@ use crate::bridge::{CoreBridge, ReloadVisualsEvent};
 use crate::interpolation::{interpolated_pos, VisualEntityId, VisualMotion};
 use crate::projection::ActiveProjection;
 use crate::render::LevelRoot;
+
+const BEAM_Z: f32 = 0.55;
 
 /// Horseshoe magnet art faces up; rotation tracks sim `Magnet::direction`.
 #[derive(Component)]
@@ -26,14 +28,25 @@ impl MagnetVisual {
 }
 
 #[derive(Component)]
-struct MagnetBeamSegment;
+pub(crate) struct MagnetBeamSegment(f32);
 
+/// Tracks when beam geometry was last rebuilt (segments respawn each sim tick).
 #[derive(Resource, Default)]
-pub struct MagnetBeamCache(pub(crate) Vec<Entity>);
+pub struct MagnetBeams {
+    pub last_sim_tick: u64,
+}
 
-/// Drop cached beam entity ids without despawning (parent `LevelRoot` teardown handles that).
-pub fn clear_magnet_beam_cache(cache: &mut MagnetBeamCache) {
-    cache.0.clear();
+pub fn reset_magnet_beams(beams: &mut MagnetBeams) {
+    beams.last_sim_tick = u64::MAX;
+}
+
+pub fn reset_magnet_beams_on_reload(
+    mut reload: EventReader<ReloadVisualsEvent>,
+    mut beams: ResMut<MagnetBeams>,
+) {
+    if reload.read().next().is_some() {
+        reset_magnet_beams(&mut beams);
+    }
 }
 
 fn magnet_facing(kind: &ElementKind) -> Option<Direction> {
@@ -43,14 +56,11 @@ fn magnet_facing(kind: &ElementKind) -> Option<Direction> {
     }
 }
 
-pub fn clear_magnet_beams_on_reload(
-    mut reload: EventReader<ReloadVisualsEvent>,
-    mut cache: ResMut<MagnetBeamCache>,
-) {
-    if reload.read().next().is_none() {
-        return;
-    }
-    clear_magnet_beam_cache(&mut cache);
+fn beam_angle(mag_cell: Cell, direction: Direction, projection: &ActiveProjection) -> f32 {
+    let (dc, dr) = direction.delta();
+    let from = projection.project(mag_cell, BEAM_Z);
+    let to = projection.project(mag_cell.offset(dc, dr), BEAM_Z);
+    (to.y - from.y).atan2(to.x - from.x)
 }
 
 pub fn update_magnet_visuals(
@@ -86,7 +96,7 @@ pub fn update_magnet_visuals(
     }
 }
 
-/// Red attraction beam — same ray as `World::magnet_beam_cells` (blocked by walls/objects).
+/// Red attraction beam — one segment per illuminated cell; full rebuild each sim tick.
 pub fn update_magnet_beams(
     state: Res<State<AppState>>,
     time: Res<Time>,
@@ -94,16 +104,33 @@ pub fn update_magnet_beams(
     bridge: Res<CoreBridge>,
     projection: Res<ActiveProjection>,
     level_roots: Query<Entity, With<LevelRoot>>,
-    mut cache: ResMut<MagnetBeamCache>,
+    mut magnet_beams: ResMut<MagnetBeams>,
+    segments: Query<(Entity, &MagnetBeamSegment), With<MagnetBeamSegment>>,
+    mut sprites: Query<(&MagnetBeamSegment, &mut Sprite)>,
 ) {
     if *state.get() != AppState::Playing {
         return;
     }
 
-    for entity in cache.0.drain(..) {
-        if commands.get_entity(entity).is_some() {
-            commands.entity(entity).despawn();
-        }
+    let pulse = 0.38 + 0.14 * (time.elapsed_secs() * 5.0).sin();
+
+    for (fade, mut sprite) in &mut sprites {
+        sprite.color = Color::srgba(
+            1.0,
+            0.1,
+            0.06,
+            (pulse * fade.0).clamp(0.12, 0.55),
+        );
+    }
+
+    let sim_tick = bridge.world.tick;
+    if sim_tick == magnet_beams.last_sim_tick {
+        return;
+    }
+    magnet_beams.last_sim_tick = sim_tick;
+
+    for (entity, _) in &segments {
+        commands.entity(entity).despawn();
     }
 
     let Some(root) = level_roots.iter().next() else {
@@ -111,38 +138,35 @@ pub fn update_magnet_beams(
     };
 
     let tile = projection.tile_size();
-    let pulse = 0.38 + 0.14 * (time.elapsed_secs() * 5.0).sin();
+    let segment_size = Vec2::new(tile * 0.92, tile * 0.4);
 
-    for (mag_cell, state) in &bridge.world.elements {
-        let ElementKind::Magnet { direction } = &state.kind else {
+    for (mag_cell, el) in &bridge.world.elements {
+        let ElementKind::Magnet { direction } = &el.kind else {
             continue;
         };
         let cells = bridge.world.magnet_beam_cells(*mag_cell, *direction);
-        let count = cells.len().max(1) as f32;
-        let beam_width = tile * 0.4;
-        let segment_size = match direction {
-            Direction::Left | Direction::Right => Vec2::new(tile * 0.92, beam_width),
-            Direction::Up | Direction::Down => Vec2::new(beam_width, tile * 0.92),
-        };
-        let rot = Quat::from_rotation_z(magnet_direction_rotation(*direction));
+        if cells.is_empty() {
+            continue;
+        }
+
+        let rot = Quat::from_rotation_z(beam_angle(*mag_cell, *direction, &projection));
+        let count = cells.len() as f32;
 
         for (i, cell) in cells.iter().enumerate() {
             let fade = 1.0 - (i as f32 / count) * 0.3;
-            let alpha = (pulse * fade).clamp(0.12, 0.55);
-            let pos = projection.project(*cell, 0.55);
+            let pos = projection.project(*cell, BEAM_Z);
             let entity = commands
                 .spawn((
                     Sprite {
-                        color: Color::srgba(1.0, 0.1, 0.06, alpha),
+                        color: Color::srgba(1.0, 0.1, 0.06, (pulse * fade).clamp(0.12, 0.55)),
                         custom_size: Some(segment_size),
                         ..default()
                     },
                     Transform::from_translation(pos).with_rotation(rot),
-                    MagnetBeamSegment,
+                    MagnetBeamSegment(fade),
                 ))
                 .id();
             commands.entity(root).add_child(entity);
-            cache.0.push(entity);
         }
     }
 }

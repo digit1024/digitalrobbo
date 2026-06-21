@@ -17,8 +17,8 @@ pub use aura::{sync_fx_auras, tick_teleport_auras};
 pub use capsule_visual::{update_capsule_visuals, CapsuleVisual};
 pub use collect::tick_collect_pop_effects;
 pub use magnet::{
-    clear_magnet_beam_cache, clear_magnet_beams_on_reload, update_magnet_beams, update_magnet_visuals,
-    MagnetBeamCache, MagnetVisual,
+    reset_magnet_beams, reset_magnet_beams_on_reload, update_magnet_beams, update_magnet_visuals,
+    MagnetBeams, MagnetVisual,
 };
 pub use collect::CollectPopEffect;
 pub use particle::FxParticle;

@@ -199,6 +199,16 @@ pub fn enemy_move_delay(kind: &ElementKind) -> u32 {
     gnurobbo_delay_to_ticks(gnu_cycles)
 }
 
+/// gnurobbo `DELAY_MAGNET_ATTRACT` (= `DELAY_ROBBO`): ticks between magnet pull steps.
+pub fn magnet_attract_delay() -> u32 {
+    gnurobbo_delay_to_ticks(4)
+}
+
+/// gnurobbo `DELAY_BOMB_TARGET` (= `DELAY_BIGBOOM + 2`): ticks before a tagged bomb detonates.
+pub fn bomb_chain_delay_ticks() -> u32 {
+    gnurobbo_delay_to_ticks(5)
+}
+
 #[cfg(test)]
 mod timing_tests {
     use super::*;

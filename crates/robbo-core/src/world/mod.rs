@@ -44,8 +44,11 @@ pub struct World {
     pub sensible_bears: bool,
     pub robbo_magnet_locked: bool,
     pub magnet_pull_dir: Direction,
+    /// gnurobbo `robbo.moved` while magnet-locked — counts down before the next pull step.
+    pub magnet_pull_cooldown: u32,
     pub barrier_directions: HashMap<Cell, Direction>,
-    pub delayed_bomb_cells: Vec<Cell>,
+    /// gnurobbo `moved = DELAY_BOMB_TARGET` — bombs waiting to detonate (cell → ticks left).
+    pub bomb_chain_pending: HashMap<Cell, u32>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default, Hash)]
@@ -80,8 +83,9 @@ impl World {
             sensible_bears: true,
             robbo_magnet_locked: false,
             magnet_pull_dir: Direction::Down,
+            magnet_pull_cooldown: 0,
             barrier_directions: HashMap::new(),
-            delayed_bomb_cells: Vec::new(),
+            bomb_chain_pending: HashMap::new(),
         }
     }
 
@@ -311,8 +315,17 @@ impl World {
             return events;
         }
 
+        if self.magnet_pull_cooldown > 0 {
+            self.magnet_pull_cooldown -= 1;
+        }
+
         if self.robbo_magnet_locked {
-            self.magnet_pull_robbo(&mut events);
+            if self.magnet_pull_cooldown == 0 {
+                self.magnet_pull_robbo(&mut events);
+                if self.status == LevelStatus::Playing {
+                    self.magnet_pull_cooldown = crate::element::magnet_attract_delay();
+                }
+            }
         } else {
             match input {
                 PlayerInput::Move(dir) => self.try_move_robbo(dir, &mut events),
@@ -329,7 +342,7 @@ impl World {
         self.tick_guns(&mut events);
         self.tick_barriers(&mut events);
         self.tick_magnets(&mut events);
-        self.tick_delayed_bombs(&mut events);
+        self.tick_bomb_chain(&mut events);
 
         events
     }
@@ -343,6 +356,7 @@ impl World {
     pub(crate) fn kill_robbo(&mut self, cause: DeathCause, events: &mut Vec<GameEvent>) {
         self.status = LevelStatus::Failed;
         self.robbo_magnet_locked = false;
+        self.magnet_pull_cooldown = 0;
         events.push(GameEvent::Died {
             entity_id: self.robbo_id,
             cause,
@@ -430,16 +444,43 @@ impl World {
         }
     }
 
-    fn tick_delayed_bombs(&mut self, events: &mut Vec<GameEvent>) {
-        let cells: Vec<Cell> = self.delayed_bomb_cells.drain(..).collect();
-        for cell in cells {
-            self.explode_at(cell, events);
+    fn tick_bomb_chain(&mut self, events: &mut Vec<GameEvent>) {
+        let mut ready = Vec::new();
+        for (cell, ticks) in self.bomb_chain_pending.iter_mut() {
+            if *ticks > 0 {
+                *ticks -= 1;
+            }
+            if *ticks == 0 {
+                ready.push(*cell);
+            }
+        }
+        ready.sort_by_key(|c| (c.row, c.col));
+        for cell in ready {
+            if self.bomb_chain_pending.remove(&cell).is_some() {
+                self.detonate_bomb(cell, events);
+            }
         }
     }
 
     pub(crate) fn schedule_bomb_detonation(&mut self, cell: Cell) {
-        if !self.delayed_bomb_cells.contains(&cell) {
-            self.delayed_bomb_cells.push(cell);
+        self.queue_bomb_detonation(cell, 0);
+    }
+
+    pub(crate) fn queue_bomb_detonation(&mut self, cell: Cell, delay_ticks: u32) {
+        if !self.in_bounds(cell) {
+            return;
+        }
+        if !self
+            .element_at(cell)
+            .is_some_and(|(_, s)| matches!(s.kind, ElementKind::Bomb))
+        {
+            return;
+        }
+        match self.bomb_chain_pending.get(&cell) {
+            Some(existing) if *existing <= delay_ticks => {}
+            _ => {
+                self.bomb_chain_pending.insert(cell, delay_ticks);
+            }
         }
     }
 
@@ -464,8 +505,7 @@ impl World {
                     ));
                 }
                 ElementKind::Bomb => {
-                    self.remove_element_by_id(id);
-                    self.explode_at(cell, events);
+                    self.queue_bomb_detonation(cell, 0);
                 }
                 k if Self::is_shot_destroyable(&k) => {
                     self.remove_element_by_id(id);

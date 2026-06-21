@@ -27,26 +27,32 @@ impl World {
         path
     }
 
+    /// gnurobbo board scan: row-major (y, then x). First magnet to hit Robbo wins.
+    fn magnets_in_scan_order(&self) -> Vec<(Cell, Direction)> {
+        let mut magnets: Vec<(Cell, Direction)> = self
+            .elements
+            .iter()
+            .filter_map(|(cell, state)| match state.kind {
+                ElementKind::Magnet { direction } => Some((*cell, direction)),
+                _ => None,
+            })
+            .collect();
+        magnets.sort_by_key(|(cell, _)| (cell.row, cell.col));
+        magnets
+    }
+
     pub(crate) fn tick_magnets(&mut self, _events: &mut Vec<GameEvent>) {
         if self.robbo_magnet_locked {
             return;
         }
 
-        let Some(robbo_idx) = self
-            .elements
-            .iter()
-            .position(|(_, s)| matches!(s.kind, ElementKind::Robbo))
-        else {
+        let Some(robbo_cell) = self.robbo_cell() else {
             return;
         };
-        let _robbo_cell = self.elements[robbo_idx].0;
 
-        for (mag_cell, state) in self.elements.iter() {
-            let ElementKind::Magnet { direction } = state.kind else {
-                continue;
-            };
+        for (mag_cell, direction) in self.magnets_in_scan_order() {
             let (dc, dr) = direction.delta();
-            let mut cursor = *mag_cell;
+            let mut cursor = mag_cell;
             loop {
                 let next = cursor.offset(dc, dr);
                 if !self.in_bounds(next) {
@@ -55,12 +61,12 @@ impl World {
                 if self.tile_at(next).is_some_and(|t| t.blocks_movement()) {
                     break;
                 }
-                if let Some((_, el)) = self.element_at(next) {
-                    if matches!(el.kind, ElementKind::Robbo) {
-                        self.robbo_magnet_locked = true;
-                        self.magnet_pull_dir = direction.opposite();
-                        return;
-                    }
+                if next == robbo_cell {
+                    self.robbo_magnet_locked = true;
+                    self.magnet_pull_dir = direction.opposite();
+                    return;
+                }
+                if self.element_at(next).is_some() {
                     break;
                 }
                 cursor = next;

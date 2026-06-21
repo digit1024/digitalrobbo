@@ -36,9 +36,9 @@ use bevy::prelude::*;
 use bevy::winit::{WakeUp, WinitPlugin};
 use bridge::{CoreBridge, EntityMap, GameSession, GameTickTimer, LoadLevelEvent, ReloadVisualsEvent, TileEntityMap};
 use effects::{
-    clear_magnet_beams_on_reload, fx_on_core_events, sync_fx_auras, tick_collect_pop_effects,
+    fx_on_core_events, reset_magnet_beams_on_reload, sync_fx_auras, tick_collect_pop_effects,
     tick_fx_particles, tick_teleport_auras, update_capsule_visuals, update_magnet_beams,
-    update_magnet_visuals, update_projectile_visuals, update_screw_visuals, MagnetBeamCache,
+    update_magnet_visuals, update_projectile_visuals, update_screw_visuals, MagnetBeams,
 };
 use game_menus::{
     cleanup_game_menu, game_menu_button_input, spawn_game_menu, update_level_select_menu,
@@ -109,7 +109,7 @@ fn configure_app(app: &mut App, allow_any_thread: bool) {
         .insert_resource(SteeringState::default())
         .insert_resource(TestInputInject::default())
         .insert_resource(editor::EditorState::default())
-        .init_resource::<MagnetBeamCache>()
+        .init_resource::<MagnetBeams>()
         .add_event::<bridge::CoreGameEvent>()
         .add_event::<LoadLevelEvent>()
         .add_event::<ReloadVisualsEvent>()
@@ -233,7 +233,7 @@ fn configure_app(app: &mut App, allow_any_thread: bool) {
         .add_systems(
             Update,
             (
-                clear_magnet_beams_on_reload,
+                reset_magnet_beams_on_reload,
                 render::update_robbo_sprite,
                 render::update_entity_sprites,
                 update_magnet_visuals,
@@ -245,6 +245,7 @@ fn configure_app(app: &mut App, allow_any_thread: bool) {
                 render::update_tile_vanish_effects,
                 render::update_teleport_reveal,
             )
+                .after(bridge::game_tick_system)
                 .after(render::sync_visuals)
                 .before(interpolation::advance_interpolation_system),
         );

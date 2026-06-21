@@ -1132,6 +1132,146 @@ mod tests {
     }
 
     #[test]
+    fn magnet_pulls_one_cell_then_waits_delay() {
+        use crate::element::magnet_attract_delay;
+
+        let w = 8u16;
+        let h = 3u16;
+        let tiles = vec![TileKind::Empty; (w * h) as usize];
+        let elements = vec![
+            (
+                Cell::new(0, 1),
+                ElementState::new(
+                    2,
+                    ElementKind::Magnet {
+                        direction: Direction::Right,
+                    },
+                    Direction::Right,
+                ),
+            ),
+            (Cell::new(4, 1), robbo_at(Cell::new(4, 1))),
+        ];
+        let mut world = make_world(w, h, tiles, elements, 0);
+        let delay = magnet_attract_delay();
+
+        // Tick 1: beam locks Robbo; no pull yet (GNU magnet scan runs after robbo phase).
+        world.step(PlayerInput::Wait);
+        assert!(world.robbo_magnet_locked);
+        assert_eq!(world.robbo_cell(), Some(Cell::new(4, 1)));
+
+        // Tick 2: first pull step toward magnet.
+        world.step(PlayerInput::Wait);
+        assert_eq!(world.robbo_cell(), Some(Cell::new(3, 1)));
+
+        // Cooldown ticks: no movement.
+        for _ in 0..delay - 1 {
+            world.step(PlayerInput::Wait);
+            assert_eq!(world.robbo_cell(), Some(Cell::new(3, 1)));
+        }
+
+        // Next allowed pull.
+        world.step(PlayerInput::Wait);
+        assert_eq!(world.robbo_cell(), Some(Cell::new(2, 1)));
+    }
+
+    #[test]
+    fn opposing_magnets_first_in_scan_order_wins() {
+        let w = 8u16;
+        let h = 3u16;
+        let tiles = vec![TileKind::Empty; (w * h) as usize];
+        // Left magnet (0,1) scanned before right magnet (6,1); both beams hit Robbo at (3,1).
+        let elements = vec![
+            (
+                Cell::new(0, 1),
+                ElementState::new(
+                    2,
+                    ElementKind::Magnet {
+                        direction: Direction::Right,
+                    },
+                    Direction::Right,
+                ),
+            ),
+            (
+                Cell::new(6, 1),
+                ElementState::new(
+                    3,
+                    ElementKind::Magnet {
+                        direction: Direction::Left,
+                    },
+                    Direction::Left,
+                ),
+            ),
+            (Cell::new(3, 1), robbo_at(Cell::new(3, 1))),
+        ];
+        let mut world = make_world(w, h, tiles, elements, 0);
+
+        world.step(PlayerInput::Wait);
+        assert!(world.robbo_magnet_locked);
+        assert_eq!(world.magnet_pull_dir, Direction::Left);
+
+        world.step(PlayerInput::Wait);
+        // Pulled toward left magnet, not right.
+        assert_eq!(world.robbo_cell(), Some(Cell::new(2, 1)));
+    }
+
+    #[test]
+    fn adjacent_bombs_chain_with_delay_not_same_tick() {
+        use crate::element::bomb_chain_delay_ticks;
+
+        let w = 6u16;
+        let h = 3u16;
+        let tiles = vec![TileKind::Empty; (w * h) as usize];
+        let elements = vec![
+            (
+                Cell::new(1, 1),
+                ElementState::new(2, ElementKind::Bomb, Direction::Down),
+            ),
+            (
+                Cell::new(2, 1),
+                ElementState::new(3, ElementKind::Bomb, Direction::Down),
+            ),
+        ];
+        let mut world = make_world(w, h, tiles, elements, 0);
+        let delay = bomb_chain_delay_ticks();
+
+        world.detonate_bomb(Cell::new(1, 1), &mut Vec::new());
+        assert!(
+            !world
+                .elements
+                .iter()
+                .any(|(c, s)| *c == Cell::new(1, 1) && matches!(s.kind, ElementKind::Bomb)),
+            "first bomb gone"
+        );
+        assert!(
+            world
+                .elements
+                .iter()
+                .any(|(c, s)| *c == Cell::new(2, 1) && matches!(s.kind, ElementKind::Bomb)),
+            "neighbor bomb still present"
+        );
+
+        for _ in 0..delay.saturating_sub(1) {
+            world.step(PlayerInput::Wait);
+            assert!(
+                world
+                    .elements
+                    .iter()
+                    .any(|(c, s)| *c == Cell::new(2, 1) && matches!(s.kind, ElementKind::Bomb)),
+                "chain bomb waits before detonating"
+            );
+        }
+
+        world.step(PlayerInput::Wait);
+        assert!(
+            !world
+                .elements
+                .iter()
+                .any(|(c, s)| *c == Cell::new(2, 1) && matches!(s.kind, ElementKind::Bomb)),
+            "second bomb detonates after delay"
+        );
+    }
+
+    #[test]
     fn bomb_does_not_destroy_capsule() {
         let w = 5u16;
         let h = 3u16;

@@ -4,7 +4,7 @@ use robbo_core::{Cell, Direction, ElementKind, GameEvent, TileKind};
 use crate::assets::{SpriteAssets, bear_direction_rotation, dir_to_idx};
 use crate::bridge::{CoreBridge, EntityMap, GameSession, GameTickTimer, ReloadVisualsEvent, TileEntityMap, TICK_SECS};
 use crate::effects::{
-    clear_magnet_beam_cache, CapsuleVisual, CollectPopEffect, FxParticle, MagnetBeamCache, MagnetVisual,
+    reset_magnet_beams, CapsuleVisual, CollectPopEffect, FxParticle, MagnetBeams, MagnetVisual,
     TeleportAuraAnchor, projectile_sprite_bundle, projectile_visual_for, ProjectileVisual, ScrewVisual,
 };
 use crate::input::SteeringState;
@@ -523,7 +523,7 @@ pub fn rebuild_level_visuals(
     assets: Option<Res<SpriteAssets>>,
     mut entity_map: ResMut<EntityMap>,
     mut tile_map: ResMut<TileEntityMap>,
-    mut magnet_cache: ResMut<MagnetBeamCache>,
+    mut magnet_beams: ResMut<MagnetBeams>,
     level_roots: Query<Entity, With<LevelRoot>>,
     mut reload: EventReader<ReloadVisualsEvent>,
 ) {
@@ -531,7 +531,7 @@ pub fn rebuild_level_visuals(
         return;
     }
 
-    clear_magnet_beam_cache(&mut magnet_cache);
+    reset_magnet_beams(&mut magnet_beams);
     despawn_level(&mut commands, &level_roots, &mut entity_map, &mut tile_map);
     spawn_level_visuals(
         &mut commands,
@@ -691,14 +691,14 @@ pub fn teardown_level_scene(
     mut commands: Commands,
     mut entity_map: ResMut<EntityMap>,
     mut tile_map: ResMut<TileEntityMap>,
-    mut magnet_cache: ResMut<MagnetBeamCache>,
+    mut magnet_beams: ResMut<MagnetBeams>,
     level_roots: Query<Entity, With<LevelRoot>>,
     fx_particles: Query<Entity, With<FxParticle>>,
     teleport_anchors: Query<Entity, With<TeleportAuraAnchor>>,
     explosions: Query<Entity, With<ExplosionEffect>>,
     collect_pops: Query<Entity, With<CollectPopEffect>>,
 ) {
-    clear_magnet_beam_cache(&mut magnet_cache);
+    reset_magnet_beams(&mut magnet_beams);
     for entity in fx_particles
         .iter()
         .chain(teleport_anchors.iter())
