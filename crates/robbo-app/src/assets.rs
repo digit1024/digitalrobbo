@@ -21,12 +21,13 @@ pub struct SpriteAssets {
     pub bullet_pickup: Handle<Image>,
     pub extra_life: Handle<Image>,
     pub question_mark: Handle<Image>,
-    pub projectile: Handle<Image>,
+    /// Robbo / gun / cannon shots (lasers, beams, bolts).
+    pub bullet: Handle<Image>,
     pub teleport: Handle<Image>,
     pub magnet: Handle<Image>,
-    // bears: [right, front, back, up]
-    pub bear: [Handle<Image>; 4],
-    pub blackbear: [Handle<Image>; 4],
+    /// Bear sprites always face up; rotation is applied at render time.
+    pub bear_up: Handle<Image>,
+    pub blackbear_up: Handle<Image>,
     pub butterfly: [Handle<Image>; 4],
     pub bird: Handle<Image>,
     // guns: [right, down, left, up]
@@ -69,11 +70,11 @@ impl SpriteAssets {
             bullet_pickup: sp("bullet_pickup"),
             extra_life:   sp("extra_life"),
             question_mark: sp("question_mark"),
-            projectile:   sp("projectile"),
+            bullet:       sp("bullet"),
             teleport:     sp("teleport"),
             magnet:       sp("magnet"),
-            bear:  [sp("bear_right"), sp("bear_front"), sp("bear_back"), sp("bear_up")],
-            blackbear: [sp("blackbear_right"), sp("blackbear_front"), sp("blackbear_back"), sp("blackbear_up")],
+            bear_up: sp("bear_up"),
+            blackbear_up: sp("baar_2Up"),
             butterfly: [sp("butterfly_right"), sp("butterfly_front"), sp("butterfly_back"), sp("butterfly_up")],
             bird:         sp("bird"),
             gun:   [sp("gun_right"), sp("gun_down"), sp("gun_left"), sp("gun_up")],
@@ -83,7 +84,7 @@ impl SpriteAssets {
             tile_wall_red:    sp("tile_wall_a"),
             tile_wall_green:  sp("tile_wall_b"),
             tile_wall_black:  sp("tile_wall_c"),
-            tile_ground:      sp("tile_ground"),
+            tile_ground:      sp("dirt"),
             tile_door_closed: sp("door"),
             tile_barrier:     sp("tile_barrier"),
         }
@@ -102,15 +103,15 @@ impl SpriteAssets {
             ElementKind::Key => self.key.clone(),
             ElementKind::BulletPickup => self.bullet_pickup.clone(),
             ElementKind::QuestionMark { .. } => self.question_mark.clone(),
-            ElementKind::Projectile { .. } => self.projectile.clone(),
+            ElementKind::Projectile { .. } => self.bullet.clone(),
             ElementKind::Teleport { .. } => self.teleport.clone(),
             ElementKind::Magnet { .. } => self.magnet.clone(),
-            ElementKind::Bear { .. } => self.bear[dir_idx].clone(),
-            ElementKind::BlackBear { .. } => self.blackbear[dir_idx].clone(),
+            ElementKind::Bear { .. } => self.bear_up.clone(),
+            ElementKind::BlackBear { .. } => self.blackbear_up.clone(),
             ElementKind::Butterfly => self.butterfly[dir_idx].clone(),
             ElementKind::Bird { .. } => self.bird.clone(),
             ElementKind::Gun { direction, .. } => self.gun[dir_to_idx(*direction)].clone(),
-            ElementKind::Laser { .. } | ElementKind::BlasterCell { .. } => self.projectile.clone(),
+            ElementKind::Laser { .. } | ElementKind::BlasterCell { .. } => self.bullet.clone(),
             ElementKind::BigBoom { .. } => self.bomb.clone(),
             ElementKind::BarbedWire => self.tile_wall_black.clone(),
             ElementKind::Stop => self.tile_empty.clone(),
@@ -130,6 +131,16 @@ impl SpriteAssets {
             TileKind::Barrier     => self.tile_barrier.clone(),
             TileKind::Stop        => self.tile_wall_red.clone(),
         })
+    }
+}
+
+/// Z-rotation (radians) for a bear sprite whose base art faces up.
+pub fn bear_direction_rotation(dir: Direction) -> f32 {
+    match dir {
+        Direction::Up => 0.0,
+        Direction::Right => -std::f32::consts::FRAC_PI_2,
+        Direction::Down => std::f32::consts::PI,
+        Direction::Left => std::f32::consts::FRAC_PI_2,
     }
 }
 

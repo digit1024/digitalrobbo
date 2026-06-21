@@ -102,7 +102,7 @@ impl World {
         }
 
         if self.tile_at(target) == Some(TileKind::Ground) {
-            self.set_tile(target, TileKind::Empty);
+            self.clear_ground_tile(target, events);
         }
 
         match gun_type {
@@ -170,7 +170,7 @@ impl World {
                 continue;
             }
             if self.tile_at(next) == Some(TileKind::Ground) {
-                self.set_tile(next, TileKind::Empty);
+                self.clear_ground_tile(next, events);
                 self.remove_element_by_id(id);
                 continue;
             }
@@ -271,7 +271,7 @@ impl World {
             }
 
             if self.tile_at(next) == Some(TileKind::Ground) {
-                self.set_tile(next, TileKind::Empty);
+                self.clear_ground_tile(next, events);
             }
 
             self.place_laser_segment(next, direction, true, source_id);

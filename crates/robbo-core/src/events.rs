@@ -1,6 +1,7 @@
 use crate::cell::Cell;
 use crate::direction::Direction;
 use crate::element::ElementKind;
+use crate::tile::TileKind;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -51,7 +52,14 @@ pub enum GameEvent {
     Revealed {
         at: Cell,
     },
-    DoorOpened,
+    DoorOpened {
+        at: Cell,
+    },
+    /// Ground (`H`) or similar tile removed from the board.
+    TileCleared {
+        at: Cell,
+        kind: TileKind,
+    },
     Died {
         entity_id: u32,
         cause: DeathCause,

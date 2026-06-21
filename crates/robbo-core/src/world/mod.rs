@@ -161,6 +161,18 @@ impl World {
         }
     }
 
+    /// Clear a ground tile and notify the view layer for vanish animation.
+    pub(crate) fn clear_ground_tile(&mut self, cell: Cell, events: &mut Vec<GameEvent>) {
+        if self.tile_at(cell) != Some(TileKind::Ground) {
+            return;
+        }
+        self.set_tile(cell, TileKind::Empty);
+        events.push(GameEvent::TileCleared {
+            at: cell,
+            kind: TileKind::Ground,
+        });
+    }
+
     pub fn element_at(&self, cell: Cell) -> Option<(usize, &ElementState)> {
         self.elements
             .iter()
@@ -409,7 +421,7 @@ impl World {
                     self.explode_at(cell, events);
                 }
                 _ if self.tile_at(cell) == Some(TileKind::Ground) => {
-                    self.set_tile(cell, TileKind::Empty);
+                    self.clear_ground_tile(cell, events);
                 }
                 ElementKind::Screw => {
                     self.remove_element_by_id(id);

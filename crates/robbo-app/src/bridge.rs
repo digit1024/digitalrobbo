@@ -7,7 +7,7 @@ use crate::app_state::AppState;
 use crate::input::SteeringState;
 use crate::ui::LevelCountdown;
 
-pub const TICK_SECS: f32 = 0.14; // ~7 ticks/s — enemies/guns advance at this rate
+pub const TICK_SECS: f32 = 0.1; // ~7 ticks/s — enemies/guns advance at this rate
 /// Visual step length — always equals one sim tick (Robbo, enemies, bullets, pushed boxes).
 pub const ANIM_SECS: f32 = TICK_SECS;
 
@@ -31,6 +31,9 @@ pub struct GameSession {
 
 #[derive(Resource, Default)]
 pub struct EntityMap(pub HashMap<u32, Entity>);
+
+#[derive(Resource, Default)]
+pub struct TileEntityMap(pub HashMap<robbo_core::Cell, Entity>);
 
 /// Drives the game simulation at a fixed tick rate.
 #[derive(Resource)]

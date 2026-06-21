@@ -28,7 +28,7 @@ use audio::{
 use bevy::log::LogPlugin;
 use bevy::prelude::*;
 use bevy::winit::{WakeUp, WinitPlugin};
-use bridge::{CoreBridge, EntityMap, GameSession, GameTickTimer, LoadLevelEvent, ReloadVisualsEvent};
+use bridge::{CoreBridge, EntityMap, GameSession, GameTickTimer, LoadLevelEvent, ReloadVisualsEvent, TileEntityMap};
 use input::{apply_test_input, InputCooldown, SteeringState, TestInputInject};
 use intro::{setup_intro, spawn_intro, start_intro_audio};
 use levels::{LevelRegistry, LevelSelection};
@@ -83,6 +83,7 @@ fn configure_app(app: &mut App, allow_any_thread: bool) {
         .insert_resource(ActiveProjection::default())
         .insert_resource(GameSession::default())
         .insert_resource(EntityMap::default())
+        .insert_resource(TileEntityMap::default())
         .insert_resource(GameTickTimer::default())
         .insert_resource(LevelRegistry::load_builtin())
         .insert_resource(LevelSelection::default())
@@ -119,6 +120,7 @@ fn configure_app(app: &mut App, allow_any_thread: bool) {
                 ui::load_level_system,
                 render::rebuild_level_visuals,
                 render::update_entity_transforms,
+                render::update_bear_visuals,
                 camera::reset_camera_on_level_load,
                 camera::update_camera,
                 ui::tick_speedrun_timer,
@@ -188,6 +190,8 @@ fn configure_app(app: &mut App, allow_any_thread: bool) {
                 render::update_robbo_sprite,
                 render::update_entity_sprites,
                 render::update_explosion_effects,
+                render::update_tile_vanish_effects,
+                render::update_teleport_reveal,
             )
                 .after(render::sync_visuals)
                 .before(interpolation::advance_interpolation_system),

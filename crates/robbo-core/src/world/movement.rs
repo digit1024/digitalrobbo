@@ -29,7 +29,7 @@ impl World {
             if self.keys > 0 {
                 self.keys -= 1;
                 self.set_tile(target, TileKind::Empty);
-                events.push(GameEvent::DoorOpened);
+                events.push(GameEvent::DoorOpened { at: target });
             }
             return;
         }

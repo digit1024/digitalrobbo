@@ -1,9 +1,9 @@
 use bevy::prelude::*;
-use robbo_core::{Cell, GameEvent, TileKind};
+use robbo_core::{Cell, Direction, ElementKind, GameEvent, TileKind};
 
-use crate::assets::{SpriteAssets, dir_to_idx, TILE_PX};
-use crate::bridge::{CoreBridge, EntityMap, ReloadVisualsEvent};
-use crate::interpolation::{VisualEntityId, VisualMotion, interpolated_pos, visual_step_ticks};
+use crate::assets::{SpriteAssets, bear_direction_rotation, dir_to_idx};
+use crate::bridge::{CoreBridge, EntityMap, GameTickTimer, ReloadVisualsEvent, TileEntityMap, TICK_SECS};
+use crate::interpolation::{VisualEntityId, VisualMotion, interpolated_pos, tick_phase, visual_step_ticks};
 use crate::projection::ActiveProjection;
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -12,7 +12,18 @@ use crate::projection::ActiveProjection;
 
 #[derive(Component)]
 pub struct TileSprite {
+    pub cell: Cell,
     pub tile_kind: TileKind,
+}
+
+#[derive(Component)]
+pub struct TileVanishEffect {
+    pub timer: Timer,
+}
+
+#[derive(Component)]
+pub struct TeleportReveal {
+    pub timer: Timer,
 }
 
 #[derive(Component)]
@@ -23,7 +34,69 @@ pub struct ExplosionEffect {
     pub timer: Timer,
 }
 
+/// Tick-synced rotation + move bob/scale for bears (single up-facing sprite).
+#[derive(Component)]
+pub struct BearVisual {
+    pub rotation: f32,
+    pub last_direction: Direction,
+    pub turn_from: f32,
+    pub turn_to: f32,
+    pub turn_start_tick: f32,
+    pub turning: bool,
+}
+
+impl BearVisual {
+    pub fn new(direction: Direction, tick: f32) -> Self {
+        let rotation = bear_direction_rotation(direction);
+        Self {
+            rotation,
+            last_direction: direction,
+            turn_from: rotation,
+            turn_to: rotation,
+            turn_start_tick: tick,
+            turning: false,
+        }
+    }
+}
+
 const EXPLOSION_SECS: f32 = 0.35;
+const TILE_VANISH_SECS: f32 = 0.28;
+const BEAR_BOB_PX: f32 = 5.0;
+const BEAR_SCALE_AMP: f32 = 0.05;
+/// One sim tick to spin between facing directions.
+const BEAR_TURN_TICKS: f32 = 1.0;
+
+fn is_bear_kind(kind: &ElementKind) -> bool {
+    matches!(
+        kind,
+        ElementKind::Bear { .. } | ElementKind::BlackBear { .. }
+    )
+}
+
+fn lerp_angle_shortest(from: f32, to: f32, t: f32) -> f32 {
+    let mut delta = (to - from).rem_euclid(std::f32::consts::TAU);
+    if delta > std::f32::consts::PI {
+        delta -= std::f32::consts::TAU;
+    }
+    from + delta * t
+}
+
+/// Tick-synced bob (horizontal steps) or pulse-scale (vertical steps).
+fn bear_move_fx(motion: &VisualMotion) -> (f32, f32) {
+    if motion.from == motion.to || motion.progress <= 0.0 {
+        return (0.0, 1.0);
+    }
+    let wave = (motion.progress * std::f32::consts::TAU).sin();
+    let horizontal = motion.from.row == motion.to.row && motion.from.col != motion.to.col;
+    let vertical = motion.from.col == motion.to.col && motion.from.row != motion.to.row;
+    if horizontal {
+        (wave * BEAR_BOB_PX, 1.0)
+    } else if vertical {
+        (0.0, 1.0 + wave * BEAR_SCALE_AMP)
+    } else {
+        (0.0, 1.0)
+    }
+}
 
 fn spawn_explosion_effect(
     commands: &mut Commands,
@@ -70,6 +143,7 @@ pub fn sync_visuals(
     projection: Res<ActiveProjection>,
     assets: Option<Res<SpriteAssets>>,
     mut entity_map: ResMut<EntityMap>,
+    mut tile_map: ResMut<TileEntityMap>,
     mut commands: Commands,
     mut motion_q: Query<(&VisualEntityId, &mut VisualMotion)>,
     level_roots: Query<Entity, With<LevelRoot>>,
@@ -80,12 +154,15 @@ pub fn sync_visuals(
 
     // Index moves before spawn so new projectiles/lasers start at the correct origin cell.
     let mut moves: std::collections::HashMap<u32, (Cell, Cell)> = std::collections::HashMap::new();
+    let mut teleports: std::collections::HashMap<u32, (Cell, Cell)> = std::collections::HashMap::new();
     for event in &bridge.events_queue {
         match event {
             GameEvent::Moved { entity_id, from, to }
-            | GameEvent::Pushed { entity_id, from, to }
-            | GameEvent::Teleported { entity_id, from, to } => {
+            | GameEvent::Pushed { entity_id, from, to } => {
                 moves.insert(*entity_id, (*from, *to));
+            }
+            GameEvent::Teleported { entity_id, from, to } => {
+                teleports.insert(*entity_id, (*from, *to));
             }
             _ => {}
         }
@@ -122,7 +199,7 @@ pub fn sync_visuals(
         };
         let pos = projection.project(motion.from, 1.0);
         let spawn = if let Some(ref sa) = assets {
-            commands.spawn((
+            let mut entity = commands.spawn((
                 Sprite {
                     image: sa.for_element(&state.kind, state.direction),
                     custom_size: Some(Vec2::splat(tile)),
@@ -131,9 +208,13 @@ pub fn sync_visuals(
                 Transform::from_translation(pos),
                 motion,
                 VisualEntityId(state.id),
-            ))
+            ));
+            if is_bear_kind(&state.kind) {
+                entity.insert(BearVisual::new(state.direction, sim_tick as f32));
+            }
+            entity
         } else {
-            commands.spawn((
+            let mut entity = commands.spawn((
                 Sprite {
                     custom_size: Some(Vec2::splat(tile * 0.8)),
                     color: fallback_entity_color(&state.kind),
@@ -142,7 +223,11 @@ pub fn sync_visuals(
                 Transform::from_translation(pos),
                 motion,
                 VisualEntityId(state.id),
-            ))
+            ));
+            if is_bear_kind(&state.kind) {
+                entity.insert(BearVisual::new(state.direction, sim_tick as f32));
+            }
+            entity
         };
         let id = spawn.id();
         if let Some(root) = level_root {
@@ -161,9 +246,11 @@ pub fn sync_visuals(
                     level_roots.iter().next(),
                 );
             }
+            GameEvent::DoorOpened { at } | GameEvent::TileCleared { at, .. } => {
+                start_tile_vanish(&mut commands, &tile_map, *at);
+            }
             GameEvent::Moved { entity_id, from, to }
-            | GameEvent::Pushed { entity_id, from, to }
-            | GameEvent::Teleported { entity_id, from, to } => {
+            | GameEvent::Pushed { entity_id, from, to } => {
                 if let Some(&entity) = entity_map.0.get(entity_id) {
                     let step = bridge
                         .world
@@ -178,6 +265,22 @@ pub fn sync_visuals(
                 }
             }
             _ => {}
+        }
+    }
+
+    for (entity_id, (_from, to)) in teleports {
+        if let Some(&entity) = entity_map.0.get(&entity_id) {
+            if let Ok((_, mut motion)) = motion_q.get_mut(entity) {
+                *motion = VisualMotion::settled(to, sim_tick);
+            }
+            let pos = projection.project(to, 1.0);
+            commands.entity(entity).insert((
+                Transform::from_translation(pos),
+                Visibility::Hidden,
+                TeleportReveal {
+                    timer: Timer::from_seconds(TICK_SECS, TimerMode::Once),
+                },
+            ));
         }
     }
 
@@ -249,7 +352,57 @@ pub fn update_entity_sprites(
         let Ok((_, mut sprite)) = query.get_mut(*entity) else {
             continue;
         };
+        if is_bear_kind(&state.kind) {
+            continue;
+        }
         sprite.image = sa.for_element(&state.kind, state.direction);
+    }
+}
+
+/// Bears use a single up-facing sprite; rotation + bob/scale are applied here.
+pub fn update_bear_visuals(
+    bridge: Res<CoreBridge>,
+    tick_timer: Res<GameTickTimer>,
+    projection: Res<ActiveProjection>,
+    mut query: Query<(
+        &VisualEntityId,
+        &VisualMotion,
+        &mut BearVisual,
+        &mut Transform,
+    )>,
+) {
+    let tick_now = bridge.world.tick as f32 + tick_phase(&tick_timer);
+    for (entity_id, motion, mut bear, mut transform) in &mut query {
+        let Some((_, state)) = bridge
+            .world
+            .elements
+            .iter()
+            .find(|(_, s)| s.id == entity_id.0)
+        else {
+            continue;
+        };
+
+        if state.direction != bear.last_direction {
+            bear.turn_from = bear.rotation;
+            bear.turn_to = bear_direction_rotation(state.direction);
+            bear.turn_start_tick = tick_now;
+            bear.turning = true;
+            bear.last_direction = state.direction;
+        }
+
+        if bear.turning {
+            let t = ((tick_now - bear.turn_start_tick) / BEAR_TURN_TICKS).clamp(0.0, 1.0);
+            bear.rotation = lerp_angle_shortest(bear.turn_from, bear.turn_to, t);
+            if t >= 1.0 {
+                bear.turning = false;
+            }
+        }
+
+        let pos = interpolated_pos(motion, &projection, 1.0);
+        let (bob_y, scale) = bear_move_fx(motion);
+        transform.translation = pos + Vec3::new(0.0, bob_y, 0.0);
+        transform.rotation = Quat::from_rotation_z(bear.rotation);
+        transform.scale = Vec3::splat(scale);
     }
 }
 
@@ -259,7 +412,10 @@ pub fn update_entity_sprites(
 
 pub fn update_entity_transforms(
     projection: Res<ActiveProjection>,
-    mut query: Query<(&VisualMotion, &mut Transform), With<VisualEntityId>>,
+    mut query: Query<
+        (&VisualMotion, &mut Transform),
+        (With<VisualEntityId>, Without<BearVisual>),
+    >,
 ) {
     for (motion, mut transform) in &mut query {
         *transform = Transform::from_translation(interpolated_pos(motion, &projection, 1.0));
@@ -276,6 +432,7 @@ pub fn rebuild_level_visuals(
     projection: Res<ActiveProjection>,
     assets: Option<Res<SpriteAssets>>,
     mut entity_map: ResMut<EntityMap>,
+    mut tile_map: ResMut<TileEntityMap>,
     level_roots: Query<Entity, With<LevelRoot>>,
     mut reload: EventReader<ReloadVisualsEvent>,
 ) {
@@ -283,13 +440,14 @@ pub fn rebuild_level_visuals(
         return;
     }
 
-    despawn_level(&mut commands, &level_roots, &mut entity_map);
+    despawn_level(&mut commands, &level_roots, &mut entity_map, &mut tile_map);
     spawn_level_visuals(
         &mut commands,
         &bridge.world,
         &projection,
         assets.as_deref(),
         &mut entity_map,
+        &mut tile_map,
     );
 }
 
@@ -299,8 +457,10 @@ pub fn spawn_level_visuals(
     projection: &ActiveProjection,
     assets: Option<&SpriteAssets>,
     entity_map: &mut EntityMap,
+    tile_map: &mut TileEntityMap,
 ) {
     entity_map.0.clear();
+    tile_map.0.clear();
     let tile = projection.tile_size();
     // Parent must carry Transform + Visibility or child sprites won't render (Bevy B0004).
     let root = commands
@@ -322,27 +482,39 @@ pub fn spawn_level_visuals(
                 let pos = projection.project(cell, 0.0);
                 if let Some(sa) = assets {
                     if let Some(img) = sa.for_tile(tile_kind) {
-                        parent.spawn((
-                            Sprite {
-                                image: img,
-                                custom_size: Some(Vec2::splat(tile)),
-                                ..default()
-                            },
-                            Transform::from_translation(pos),
-                            TileSprite { tile_kind },
-                        ));
+                        let id = parent
+                            .spawn((
+                                Sprite {
+                                    image: img,
+                                    custom_size: Some(Vec2::splat(tile)),
+                                    ..default()
+                                },
+                                Transform::from_translation(pos),
+                                TileSprite {
+                                    cell,
+                                    tile_kind,
+                                },
+                            ))
+                            .id();
+                        tile_map.0.insert(cell, id);
                         continue;
                     }
                 }
-                parent.spawn((
-                    Sprite {
-                        custom_size: Some(Vec2::splat(tile)),
-                        color: fallback_tile_color(tile_kind),
-                        ..default()
-                    },
-                    Transform::from_translation(pos),
-                    TileSprite { tile_kind },
-                ));
+                let id = parent
+                    .spawn((
+                        Sprite {
+                            custom_size: Some(Vec2::splat(tile)),
+                            color: fallback_tile_color(tile_kind),
+                            ..default()
+                        },
+                        Transform::from_translation(pos),
+                        TileSprite {
+                            cell,
+                            tile_kind,
+                        },
+                    ))
+                    .id();
+                tile_map.0.insert(cell, id);
             }
         }
 
@@ -350,18 +522,20 @@ pub fn spawn_level_visuals(
         for (cell, state) in &world.elements {
             let pos = projection.project(*cell, 1.0);
             let entity_id = if let Some(sa) = assets {
-                parent
-                    .spawn((
-                        Sprite {
-                            image: sa.for_element(&state.kind, state.direction),
-                            custom_size: Some(Vec2::splat(tile)),
-                            ..default()
-                        },
-                        Transform::from_translation(pos),
-                        VisualMotion::settled(*cell, world.tick),
-                        VisualEntityId(state.id),
-                    ))
-                    .id()
+                let mut spawn = parent.spawn((
+                    Sprite {
+                        image: sa.for_element(&state.kind, state.direction),
+                        custom_size: Some(Vec2::splat(tile)),
+                        ..default()
+                    },
+                    Transform::from_translation(pos),
+                    VisualMotion::settled(*cell, world.tick),
+                    VisualEntityId(state.id),
+                ));
+                if is_bear_kind(&state.kind) {
+                    spawn.insert(BearVisual::new(state.direction, world.tick as f32));
+                }
+                spawn.id()
             } else {
                 parent
                     .spawn((
@@ -385,14 +559,70 @@ fn despawn_level(
     commands: &mut Commands,
     level_roots: &Query<Entity, With<LevelRoot>>,
     entity_map: &mut EntityMap,
+    tile_map: &mut TileEntityMap,
 ) {
     // Orphan runtime spawns (projectiles etc.) live outside LevelRoot — despawn explicitly.
     for entity in entity_map.0.values() {
         commands.entity(*entity).despawn();
     }
     entity_map.0.clear();
+    tile_map.0.clear();
     for root in level_roots {
         commands.entity(root).despawn_recursive();
+    }
+}
+
+fn start_tile_vanish(commands: &mut Commands, tile_map: &TileEntityMap, cell: Cell) {
+    let Some(&entity) = tile_map.0.get(&cell) else {
+        return;
+    };
+    commands.entity(entity).insert(TileVanishEffect {
+        timer: Timer::from_seconds(TILE_VANISH_SECS, TimerMode::Once),
+    });
+}
+
+pub fn update_tile_vanish_effects(
+    time: Res<Time>,
+    mut commands: Commands,
+    assets: Option<Res<SpriteAssets>>,
+    projection: Res<ActiveProjection>,
+    mut query: Query<(Entity, &mut Transform, &mut Sprite, &mut TileVanishEffect, &mut TileSprite)>,
+) {
+    let tile = projection.tile_size();
+    for (entity, mut transform, mut sprite, mut effect, mut tile_sprite) in &mut query {
+        effect.timer.tick(time.delta());
+        let t = (effect.timer.elapsed_secs() / TILE_VANISH_SECS).clamp(0.0, 1.0);
+        let scale = 1.0 - t * 0.55;
+        transform.scale = Vec3::splat(scale);
+        let alpha = 1.0 - t;
+        sprite.color = sprite.color.with_alpha(alpha);
+
+        if effect.timer.finished() {
+            tile_sprite.tile_kind = TileKind::Empty;
+            transform.scale = Vec3::ONE;
+            if let Some(ref sa) = assets {
+                sprite.image = sa.tile_empty.clone();
+                sprite.color = Color::WHITE;
+            } else {
+                sprite.color = fallback_tile_color(TileKind::Empty);
+            }
+            sprite.custom_size = Some(Vec2::splat(tile));
+            commands.entity(entity).remove::<TileVanishEffect>();
+        }
+    }
+}
+
+pub fn update_teleport_reveal(
+    time: Res<Time>,
+    mut commands: Commands,
+    mut query: Query<(Entity, &mut TeleportReveal, &mut Visibility)>,
+) {
+    for (entity, mut reveal, mut visibility) in &mut query {
+        reveal.timer.tick(time.delta());
+        if reveal.timer.finished() {
+            *visibility = Visibility::Inherited;
+            commands.entity(entity).remove::<TeleportReveal>();
+        }
     }
 }
 

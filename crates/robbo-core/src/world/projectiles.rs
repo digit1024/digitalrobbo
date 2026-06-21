@@ -120,7 +120,7 @@ impl World {
                 ProjectileHitAction::Explode(at) => self.explode_at(at, events),
                 ProjectileHitAction::DestroyAt(at) => self.destroy_at(at, events),
                 ProjectileHitAction::ClearGround(at) => {
-                    self.set_tile(at, TileKind::Empty);
+                    self.clear_ground_tile(at, events);
                 }
             }
         }
