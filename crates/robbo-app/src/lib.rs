@@ -95,7 +95,16 @@ fn configure_app(app: &mut App, allow_any_thread: bool) {
         .add_event::<bridge::CoreGameEvent>()
         .add_event::<LoadLevelEvent>()
         .add_event::<ReloadVisualsEvent>()
-        .add_systems(Startup, (setup, load_audio_manifest, load_game_font, setup_intro))
+        .add_systems(
+            Startup,
+            (
+                setup,
+                load_audio_manifest,
+                camera::load_camera_config,
+                load_game_font,
+                setup_intro,
+            ),
+        )
         .add_systems(
             Update,
             (
@@ -108,6 +117,7 @@ fn configure_app(app: &mut App, allow_any_thread: bool) {
                 interpolation::advance_interpolation_system,
                 render::update_entity_transforms,
                 render::rebuild_level_visuals,
+                camera::reset_camera_on_level_load,
                 camera::update_camera,
                 ui::tick_speedrun_timer,
                 ui::tick_level_countdown,
@@ -131,6 +141,8 @@ fn configure_app(app: &mut App, allow_any_thread: bool) {
                 menu_navigate,
                 editor::editor_toggle,
                 iso::toggle_isometric,
+                camera::zoom_keyboard_input,
+                camera::handle_zoom_buttons,
             ),
         )
         .add_systems(OnEnter(AppState::Playing), ui::spawn_playing_hud)

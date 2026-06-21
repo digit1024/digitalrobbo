@@ -5,6 +5,7 @@ use crate::app_state::AppState;
 use crate::audio::{play_countdown_tick, GameAudio};
 use crate::bridge::{CoreBridge, CoreGameEvent, GameSession, LoadLevelEvent, ReloadVisualsEvent};
 use crate::levels::{LevelRegistry, LevelSelection};
+use crate::camera::{ZoomButton, ZoomDirection};
 use crate::persistence::{GameSave, LevelProgress, persist_save};
 
 #[derive(Resource, Default)]
@@ -41,6 +42,9 @@ impl LevelCountdown {
 
 #[derive(Component)]
 pub struct HudText;
+
+#[derive(Component)]
+pub struct PlayingHud;
 
 #[derive(Component)]
 pub struct OverlayText;
@@ -146,7 +150,7 @@ pub fn update_hud(
     }
     for mut text in &mut hud {
         **text = format!(
-            "{} | Screws: {}/{} | Ammo: {} | Keys: {} | Time: {:.1}s\nArrows move | Space shoot | Z undo | X redo | Esc pause",
+            "{} | Screws: {}/{} | Ammo: {} | Keys: {} | Time: {:.1}s\nArrows move | Space shoot | Z undo | X redo | Esc pause | +/− zoom",
             session.level_label,
             bridge.world.collected_screws,
             bridge.world.required_screws,
@@ -182,7 +186,49 @@ pub fn spawn_playing_hud(mut commands: Commands) {
             ..default()
         },
         HudText,
+        PlayingHud,
     ));
+
+    spawn_zoom_button(&mut commands, "+", 12.0, ZoomDirection::In);
+    spawn_zoom_button(&mut commands, "−", 64.0, ZoomDirection::Out);
+}
+
+fn spawn_zoom_button(
+    commands: &mut Commands,
+    label: &str,
+    right: f32,
+    direction: ZoomDirection,
+) {
+    commands
+        .spawn((
+            Button,
+            Node {
+                position_type: PositionType::Absolute,
+                right: Val::Px(right),
+                bottom: Val::Px(12.0),
+                width: Val::Px(44.0),
+                height: Val::Px(44.0),
+                justify_content: JustifyContent::Center,
+                align_items: AlignItems::Center,
+                border: UiRect::all(Val::Px(2.0)),
+                ..default()
+            },
+            BackgroundColor(Color::srgba(0.15, 0.18, 0.28, 0.9)),
+            BorderColor(Color::srgba(0.45, 0.55, 0.75, 0.9)),
+            BorderRadius::all(Val::Px(8.0)),
+            ZoomButton(direction),
+            PlayingHud,
+        ))
+        .with_children(|parent| {
+            parent.spawn((
+                Text::new(label),
+                TextFont {
+                    font_size: 26.0,
+                    ..default()
+                },
+                TextColor(Color::srgb(0.95, 0.95, 1.0)),
+            ));
+        });
 }
 
 fn overlay_label(
@@ -285,9 +331,9 @@ pub fn cleanup_overlay(mut commands: Commands, q: Query<Entity, With<OverlayText
     }
 }
 
-pub fn cleanup_hud(mut commands: Commands, hud: Query<Entity, With<HudText>>) {
+pub fn cleanup_hud(mut commands: Commands, hud: Query<Entity, With<PlayingHud>>) {
     for e in &hud {
-        commands.entity(e).despawn();
+        commands.entity(e).despawn_recursive();
     }
 }
 

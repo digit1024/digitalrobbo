@@ -1,0 +1,13 @@
+(
+    // Default visible area in tiles (width × height).
+    viewport_tiles: (width: 12, height: 16),
+    // Multiplier applied per zoom step (+ zooms in, − zooms out).
+    zoom_step: 1.15,
+    max_zoom_in: 6,
+    max_zoom_out: 4,
+    // Higher = snappier follow / zoom transitions.
+    follow_lerp: 12.0,
+    zoom_lerp: 10.0,
+    // Extra padding on the default fit so tile edges are not clipped.
+    margin: 1.05,
+)
