@@ -37,8 +37,8 @@ use bevy::winit::{WakeUp, WinitPlugin};
 use bridge::{CoreBridge, EntityMap, GameSession, GameTickTimer, LoadLevelEvent, ReloadVisualsEvent, TileEntityMap};
 use effects::{
     clear_magnet_beams_on_reload, fx_on_core_events, sync_fx_auras, tick_collect_pop_effects,
-    tick_fx_particles, tick_teleport_auras, update_magnet_beams, update_magnet_visuals,
-    update_screw_visuals, MagnetBeamCache,
+    tick_fx_particles, tick_teleport_auras, update_capsule_visuals, update_magnet_beams,
+    update_magnet_visuals, update_screw_visuals, MagnetBeamCache,
 };
 use game_menus::{
     cleanup_game_menu, game_menu_button_input, spawn_game_menu, update_level_select_menu,
@@ -137,6 +137,7 @@ fn configure_app(app: &mut App, allow_any_thread: bool) {
                 render::update_entity_transforms,
                 update_screw_visuals,
                 render::update_bear_visuals,
+                update_capsule_visuals,
                 camera::reset_camera_on_level_load,
                 camera::update_camera,
                 ui::tick_speedrun_timer,

@@ -3,7 +3,7 @@ use robbo_core::{Cell, Direction, ElementKind, GameEvent, TileKind};
 
 use crate::assets::{SpriteAssets, bear_direction_rotation, dir_to_idx};
 use crate::bridge::{CoreBridge, EntityMap, GameTickTimer, ReloadVisualsEvent, TileEntityMap, TICK_SECS};
-use crate::effects::{MagnetVisual, ScrewVisual};
+use crate::effects::{CapsuleVisual, MagnetVisual, ScrewVisual};
 use crate::interpolation::{VisualEntityId, VisualMotion, interpolated_pos, tick_phase, visual_step_ticks};
 use crate::projection::ActiveProjection;
 
@@ -226,6 +226,9 @@ pub fn sync_visuals(
             if matches!(state.kind, ElementKind::Screw) {
                 entity.insert(ScrewVisual::from_cell(cell.col, cell.row));
             }
+            if matches!(state.kind, ElementKind::Capsule) {
+                entity.insert(CapsuleVisual::from_cell(cell.col, cell.row));
+            }
             entity
         } else {
             let mut entity = commands.spawn((
@@ -246,6 +249,9 @@ pub fn sync_visuals(
             }
             if matches!(state.kind, ElementKind::Screw) {
                 entity.insert(ScrewVisual::from_cell(cell.col, cell.row));
+            }
+            if matches!(state.kind, ElementKind::Capsule) {
+                entity.insert(CapsuleVisual::from_cell(cell.col, cell.row));
             }
             entity
         };
@@ -378,6 +384,9 @@ pub fn update_entity_sprites(
         if magnet_direction(&state.kind).is_some() {
             continue;
         }
+        if matches!(state.kind, ElementKind::Capsule) {
+            continue;
+        }
         sprite.image = sa.for_element(&state.kind, state.direction);
     }
 }
@@ -437,7 +446,7 @@ pub fn update_entity_transforms(
     projection: Res<ActiveProjection>,
     mut query: Query<
         (&VisualMotion, &mut Transform),
-        (With<VisualEntityId>, Without<BearVisual>, Without<MagnetVisual>, Without<ScrewVisual>),
+        (With<VisualEntityId>, Without<BearVisual>, Without<MagnetVisual>, Without<CapsuleVisual>, Without<ScrewVisual>),
     >,
 ) {
     for (motion, mut transform) in &mut query {
@@ -563,6 +572,9 @@ pub fn spawn_level_visuals(
                 }
                 if matches!(state.kind, ElementKind::Screw) {
                     spawn.insert(ScrewVisual::from_cell(cell.col, cell.row));
+                }
+                if matches!(state.kind, ElementKind::Capsule) {
+                    spawn.insert(CapsuleVisual::from_cell(cell.col, cell.row));
                 }
                 spawn.id()
             } else {

@@ -14,6 +14,7 @@ pub struct SpriteAssets {
     // (Robbo uses self.player[]; the separate `robbo` field was removed)
     pub screw: Handle<Image>,
     pub capsule: Handle<Image>,
+    pub capsule_ready: Handle<Image>,
     pub bomb: Handle<Image>,
     pub bx: Handle<Image>,
     pub push_box: Handle<Image>,
@@ -63,6 +64,7 @@ impl SpriteAssets {
             player,
             screw:        sp("screw"),
             capsule:      sp("capsule"),
+            capsule_ready: sp("capsule_ready"),
             bomb:         sp("bomb"),
             bx:           sp("box"),
             push_box:     sp("push_box"),
