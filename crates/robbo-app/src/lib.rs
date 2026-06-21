@@ -5,6 +5,7 @@ mod bridge;
 mod camera;
 mod editor;
 mod effects;
+mod hud;
 mod input;
 mod interpolation;
 #[allow(dead_code)]
@@ -37,6 +38,7 @@ use effects::{
     fx_on_core_events, sync_fx_auras, tick_collect_pop_effects, tick_fx_particles,
     tick_teleport_auras, update_screw_visuals,
 };
+use hud::{cleanup_level_hud, hud_button_input, spawn_level_hud, update_level_hud};
 use input::{apply_test_input, InputCooldown, SteeringState, TestInputInject};
 use levels::{LevelRegistry, LevelSelection};
 use menu::{
@@ -133,7 +135,7 @@ fn configure_app(app: &mut App, allow_any_thread: bool) {
                 camera::update_camera,
                 ui::tick_speedrun_timer,
                 ui::tick_level_countdown,
-                ui::update_hud,
+                update_level_hud,
                 ui::update_overlay_text,
                 ui::on_core_events,
             )
@@ -149,6 +151,7 @@ fn configure_app(app: &mut App, allow_any_thread: bool) {
                 start_level_bgm_after_countdown,
                 unlock_audio_on_input,
                 ui_anim::tick_ui_fade,
+                hud_button_input,
                 animate_menu_planet,
                 update_menu_highlight,
                 menu_navigate,
@@ -158,10 +161,10 @@ fn configure_app(app: &mut App, allow_any_thread: bool) {
                 camera::handle_zoom_buttons,
             ),
         )
-        .add_systems(OnEnter(AppState::Playing), ui::spawn_playing_hud)
+        .add_systems(OnEnter(AppState::Playing), spawn_level_hud)
         .add_systems(
             OnExit(AppState::Playing),
-            (ui::cleanup_hud, ui::cleanup_countdown_overlay, stop_bgm, cleanup_enemy_ambient_sounds),
+            (cleanup_level_hud, ui::cleanup_countdown_overlay, stop_bgm, cleanup_enemy_ambient_sounds),
         )
         .add_systems(
             OnEnter(AppState::MainMenu),

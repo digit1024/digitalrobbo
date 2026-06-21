@@ -41,9 +41,6 @@ impl LevelCountdown {
 }
 
 #[derive(Component)]
-pub struct HudText;
-
-#[derive(Component)]
 pub struct OverlayText;
 
 #[derive(Component)]
@@ -134,29 +131,6 @@ pub fn load_level_system(
     }
 }
 
-pub fn update_hud(
-    state: Res<State<AppState>>,
-    bridge: Res<CoreBridge>,
-    session: Res<GameSession>,
-    timer: Res<SpeedrunTimer>,
-    mut hud: Query<&mut Text, With<HudText>>,
-) {
-    if *state.get() != AppState::Playing {
-        return;
-    }
-    for mut text in &mut hud {
-        **text = format!(
-            "{} | Screws: {}/{} | Ammo: {} | Keys: {} | Time: {:.1}s\nArrows move | Space shoot | Z undo | X redo | Esc pause",
-            session.level_label,
-            bridge.world.collected_screws,
-            bridge.world.required_screws,
-            bridge.world.ammo,
-            bridge.world.keys,
-            timer.elapsed_ms as f32 / 1000.0,
-        );
-    }
-}
-
 pub fn tick_speedrun_timer(
     state: Res<State<AppState>>,
     mut timer: ResMut<SpeedrunTimer>,
@@ -165,24 +139,6 @@ pub fn tick_speedrun_timer(
     if *state.get() == AppState::Playing && timer.running {
         timer.elapsed_ms += (time.delta_secs() * 1000.0) as u64;
     }
-}
-
-pub fn spawn_playing_hud(mut commands: Commands) {
-    commands.spawn((
-        Text::new(""),
-        TextFont {
-            font_size: 18.0,
-            ..default()
-        },
-        TextColor(Color::WHITE),
-        Node {
-            position_type: PositionType::Absolute,
-            top: Val::Px(8.0),
-            left: Val::Px(8.0),
-            ..default()
-        },
-        HudText,
-    ));
 }
 
 fn overlay_label(
@@ -281,12 +237,6 @@ pub fn update_overlay_text(
 
 pub fn cleanup_overlay(mut commands: Commands, q: Query<Entity, With<OverlayText>>) {
     for e in &q {
-        commands.entity(e).despawn();
-    }
-}
-
-pub fn cleanup_hud(mut commands: Commands, hud: Query<Entity, With<HudText>>) {
-    for e in &hud {
         commands.entity(e).despawn();
     }
 }

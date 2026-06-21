@@ -40,7 +40,7 @@ fetch "$ROOT/assets/fonts/MarkerFelt.ttf" \
     "$BASE/fonts/Marker%20Felt.ttf"
 
 # ── UI ──────────────────────────────────────────────────────────────────
-for name in space.png planet.png mute.png unmute.png settings.png; do
+for name in space.png planet.png mute.png unmute.png settings.png ribbon.png giveUp.png settingss.png replays.png; do
     fetch "$ROOT/assets/ui/$name" "$BASE/$name"
 done
 

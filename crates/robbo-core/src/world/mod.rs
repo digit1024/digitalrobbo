@@ -31,6 +31,8 @@ pub struct World {
     pub robbo_id: u32,
     pub next_entity_id: u32,
     pub required_screws: u32,
+    /// Screws placed on the level at load (for HUD `collected/total`).
+    pub total_screws: u32,
     pub collected_screws: u32,
     pub ammo: u32,
     pub keys: u32,
@@ -66,6 +68,7 @@ impl World {
             robbo_id: 0,
             next_entity_id: 1,
             required_screws: 0,
+            total_screws: 0,
             collected_screws: 0,
             ammo: 0,
             keys: 0,
@@ -89,12 +92,17 @@ impl World {
         elements: Vec<(Cell, ElementState)>,
         required_screws: u32,
     ) -> Self {
+        let total_screws = elements
+            .iter()
+            .filter(|(_, s)| matches!(s.kind, ElementKind::Screw))
+            .count() as u32;
         let mut world = Self {
             width,
             height,
             tiles,
             elements,
             required_screws,
+            total_screws,
             ..Self::empty(width, height)
         };
         world.rng_state = (width as u64)
