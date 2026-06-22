@@ -262,7 +262,7 @@ impl World {
                 return false;
             }
             if matches!(el.kind, ElementKind::Robbo) {
-                return false;
+                return true;
             }
             return !Self::is_walkable_element(&el.kind);
         }

@@ -38,7 +38,8 @@ use bridge::{CoreBridge, EntityMap, GameSession, GameTickTimer, LoadLevelEvent, 
 use effects::{
     fx_on_core_events, reset_magnet_beams_on_reload, sync_fx_auras, tick_collect_pop_effects,
     tick_fx_particles, tick_teleport_auras, update_capsule_visuals, update_magnet_beams,
-    update_magnet_visuals, update_projectile_visuals, update_screw_visuals, MagnetBeams,
+    update_magnet_visuals, update_projectile_visuals, update_screw_visuals,
+    update_butterfly_visuals, MagnetBeams,
 };
 use game_menus::{
     cleanup_game_menu, game_menu_button_input, spawn_game_menu, update_level_select_menu,
@@ -183,6 +184,10 @@ fn configure_app(app: &mut App, allow_any_thread: bool) {
                     .after(main_menu_pointer),
                 track_main_menu_layout,
             ),
+        )
+        .add_systems(
+            Update,
+            update_butterfly_visuals.after(render::update_bear_visuals),
         )
         .add_systems(
             Update,

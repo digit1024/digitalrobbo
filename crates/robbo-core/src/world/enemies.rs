@@ -1,6 +1,6 @@
 use crate::cell::Cell;
 use crate::direction::Direction;
-use crate::element::{ElementKind, ElementState, GunType, roll_one_in_eight};
+use crate::element::{ElementKind, ElementState, GunType, next_rand, roll_one_in_eight};
 use crate::events::{DeathCause, GameEvent};
 use crate::world::World;
 
@@ -74,27 +74,11 @@ impl World {
                 }
                 ElementKind::Butterfly => {
                     let moved = self.butterfly_move(*cell, direction);
-                    direction = self.butterfly_next_direction(moved);
+                    direction = self.butterfly_next_direction(moved, direction);
                     moved
                 }
                 _ => *cell,
             };
-
-            if matches!(state.kind, ElementKind::Butterfly) && new_cell != *cell {
-                let dc = new_cell.col - cell.col;
-                let dr = new_cell.row - cell.row;
-                direction = if dc > 0 {
-                    Direction::Right
-                } else if dc < 0 {
-                    Direction::Left
-                } else if dr > 0 {
-                    Direction::Down
-                } else if dr < 0 {
-                    Direction::Up
-                } else {
-                    direction
-                };
-            }
 
             let mv = if new_cell != *cell { Some(new_cell) } else { None };
             updates.push((id, tick_counter, direction, mv));
@@ -220,37 +204,28 @@ impl World {
         }
     }
 
-    fn butterfly_next_direction(&mut self, cell: Cell) -> Direction {
+    /// gnurobbo `BUTTERFLY` direction update after move (`board.c`).
+    fn butterfly_next_direction(&mut self, cell: Cell, current: Direction) -> Direction {
         if roll_one_in_eight(&mut self.rng_state) {
-            let dirs = [
-                Direction::Right,
-                Direction::Down,
-                Direction::Left,
-                Direction::Up,
-            ];
-            return dirs[(self.tick as usize) % dirs.len()];
+            return Direction::from_gnurobbo((next_rand(&mut self.rng_state) & 3) as u8);
         }
         let Some(robbo) = self.robbo_cell() else {
-            return Direction::Down;
+            return current;
         };
-        if (self.tick & 1) == 0 {
+        if (next_rand(&mut self.rng_state) & 1) == 0 {
             if robbo.col > cell.col {
                 Direction::Right
             } else if robbo.col < cell.col {
                 Direction::Left
-            } else if robbo.row > cell.row {
-                Direction::Down
             } else {
-                Direction::Up
+                current
             }
         } else if robbo.row > cell.row {
             Direction::Down
         } else if robbo.row < cell.row {
             Direction::Up
-        } else if robbo.col > cell.col {
-            Direction::Right
         } else {
-            Direction::Left
+            current
         }
     }
 }

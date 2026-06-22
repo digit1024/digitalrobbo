@@ -29,7 +29,7 @@ pub struct SpriteAssets {
     /// Bear sprites always face up; rotation is applied at render time.
     pub bear_up: Handle<Image>,
     pub blackbear_up: Handle<Image>,
-    pub butterfly: [Handle<Image>; 4],
+    pub butterfly: Handle<Image>,
     pub bird: Handle<Image>,
     // guns: [right, down, left, up]
     pub gun: [Handle<Image>; 4],
@@ -77,7 +77,7 @@ impl SpriteAssets {
             magnet:       sp("magnet"),
             bear_up: sp("bear_up"),
             blackbear_up: sp("baar_2Up"),
-            butterfly: [sp("butterfly_right"), sp("butterfly_front"), sp("butterfly_back"), sp("butterfly_up")],
+            butterfly: sp("butterfly"),
             bird:         sp("bird"),
             gun:   [sp("gun_right"), sp("gun_down"), sp("gun_left"), sp("gun_up")],
             tile_empty:       sp("tile_ground"),
@@ -109,7 +109,7 @@ impl SpriteAssets {
             ElementKind::Magnet { .. } => self.magnet.clone(),
             ElementKind::Bear { .. } => self.bear_up.clone(),
             ElementKind::BlackBear { .. } => self.blackbear_up.clone(),
-            ElementKind::Butterfly => self.butterfly[dir_idx].clone(),
+            ElementKind::Butterfly => self.butterfly.clone(),
             ElementKind::Bird { .. } => self.bird.clone(),
             ElementKind::Gun { direction, .. } => self.gun[dir_to_idx(*direction)].clone(),
             ElementKind::Laser { .. } | ElementKind::BlasterCell { .. } => self.bullet.clone(),

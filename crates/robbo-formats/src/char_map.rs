@@ -70,9 +70,8 @@ pub fn char_to_element(c: char) -> FormatResult<Option<(ElementKind, Direction)>
         _ => return Ok(None),
     };
     let direction = match &el {
-        ElementKind::Bear { .. } | ElementKind::BlackBear { .. } | ElementKind::Bird { .. } => {
-            Direction::Right
-        }
+        ElementKind::Bear { .. } | ElementKind::BlackBear { .. } | ElementKind::Bird { .. }
+        | ElementKind::Butterfly => Direction::Right,
         ElementKind::Magnet { direction } => *direction,
         _ => Direction::Down,
     };
@@ -316,5 +315,11 @@ mod tests {
         let (tile, el) = tile_or_element('k').unwrap();
         assert_eq!(tile, TileKind::Empty);
         assert!(matches!(el.unwrap().kind, ElementKind::BarbedWire));
+    }
+
+    #[test]
+    fn butterfly_level_char_faces_right() {
+        let (_, dir) = char_to_element('V').unwrap().unwrap();
+        assert_eq!(dir, Direction::Right);
     }
 }

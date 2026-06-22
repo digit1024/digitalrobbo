@@ -4,6 +4,7 @@
 //! presentation entities. See [`docs/architecture-design/11-visual-effects.md`](../../docs/architecture-design/11-visual-effects.md).
 
 mod aura;
+mod butterfly_visual;
 mod capsule_visual;
 mod collect;
 mod magnet;
@@ -14,6 +15,9 @@ mod screw_visual;
 mod systems;
 
 pub use aura::{sync_fx_auras, tick_teleport_auras};
+pub use butterfly_visual::{
+    attach_butterfly_visual, update_butterfly_visuals, ButterflyVisual,
+};
 pub use capsule_visual::{update_capsule_visuals, CapsuleVisual};
 pub use collect::tick_collect_pop_effects;
 pub use magnet::{

@@ -44,4 +44,14 @@ impl Direction {
             Direction::Left => Direction::Up,
         }
     }
+
+    /// gnurobbo `direction` field: 0=right, 1=down, 2=left, 3=up.
+    pub fn from_gnurobbo(v: u8) -> Self {
+        match v & 3 {
+            0 => Direction::Right,
+            1 => Direction::Down,
+            2 => Direction::Left,
+            _ => Direction::Up,
+        }
+    }
 }

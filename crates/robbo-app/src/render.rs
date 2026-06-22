@@ -4,8 +4,9 @@ use robbo_core::{Cell, Direction, ElementKind, GameEvent, TileKind};
 use crate::assets::{SpriteAssets, bear_direction_rotation, dir_to_idx};
 use crate::bridge::{CoreBridge, EntityMap, GameSession, GameTickTimer, ReloadVisualsEvent, TileEntityMap, TICK_SECS};
 use crate::effects::{
-    reset_magnet_beams, CapsuleVisual, CollectPopEffect, FxParticle, MagnetBeams, MagnetVisual,
-    TeleportAuraAnchor, projectile_sprite_bundle, projectile_visual_for, ProjectileVisual, ScrewVisual,
+    attach_butterfly_visual, reset_magnet_beams, CapsuleVisual, CollectPopEffect, FxParticle,
+    MagnetBeams, MagnetVisual, TeleportAuraAnchor, projectile_sprite_bundle, projectile_visual_for,
+    ProjectileVisual, ScrewVisual, ButterflyVisual,
 };
 use crate::input::SteeringState;
 use crate::interpolation::{VisualEntityId, VisualMotion, interpolated_pos, tick_phase, visual_step_ticks};
@@ -74,7 +75,7 @@ const BEAR_TURN_TICKS: f32 = 1.0;
 
 fn try_despawn(commands: &mut Commands, entity: Entity) {
     if commands.get_entity(entity).is_some() {
-        commands.entity(entity).despawn();
+        commands.entity(entity).despawn_recursive();
     }
 }
 
@@ -311,6 +312,9 @@ pub fn sync_visuals(
             entity
         };
         let id = spawn.id();
+        if matches!(state.kind, ElementKind::Butterfly) {
+            attach_butterfly_visual(&mut commands, id, cell.col, cell.row);
+        }
         if let Some(root) = level_root {
             commands.entity(id).set_parent(root);
         }
@@ -442,6 +446,9 @@ pub fn update_entity_sprites(
         if matches!(state.kind, ElementKind::Capsule) {
             continue;
         }
+        if matches!(state.kind, ElementKind::Butterfly) {
+            continue;
+        }
         if projectile_visual_for(&state.kind).is_some() {
             continue;
         }
@@ -504,7 +511,7 @@ pub fn update_entity_transforms(
     projection: Res<ActiveProjection>,
     mut query: Query<
         (&VisualMotion, &mut Transform),
-        (With<VisualEntityId>, Without<BearVisual>, Without<MagnetVisual>, Without<CapsuleVisual>, Without<ProjectileVisual>, Without<ScrewVisual>),
+        (With<VisualEntityId>, Without<BearVisual>, Without<ButterflyVisual>, Without<MagnetVisual>, Without<CapsuleVisual>, Without<ProjectileVisual>, Without<ScrewVisual>),
     >,
 ) {
     for (motion, mut transform) in &mut query {
@@ -564,6 +571,7 @@ pub fn spawn_level_visuals(
         ))
         .id();
 
+    let mut butterfly_attach = Vec::new();
     commands.entity(root).with_children(|parent| {
         // tile layer
         for row in 0..world.height {
@@ -637,7 +645,11 @@ pub fn spawn_level_visuals(
                 if matches!(state.kind, ElementKind::Capsule) {
                     spawn.insert(CapsuleVisual::from_cell(cell.col, cell.row));
                 }
-                spawn.id()
+                let id = spawn.id();
+                if matches!(state.kind, ElementKind::Butterfly) {
+                    butterfly_attach.push((id, cell.col, cell.row));
+                }
+                id
             } else if projectile_visual_for(&state.kind).is_some() {
                 let (sprite, pv) =
                     projectile_sprite_bundle(&state.kind, state.direction, tile);
@@ -667,6 +679,9 @@ pub fn spawn_level_visuals(
             entity_map.0.insert(state.id, entity_id);
         }
     });
+    for (id, col, row) in butterfly_attach {
+        attach_butterfly_visual(commands, id, col, row);
+    }
 }
 
 fn despawn_level(

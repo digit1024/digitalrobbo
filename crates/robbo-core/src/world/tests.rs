@@ -1502,4 +1502,30 @@ mod tests {
                 .any(|(_, s)| matches!(s.kind, ElementKind::Capsule))
         );
     }
+
+    #[test]
+    fn butterfly_does_not_step_onto_robbo() {
+        let w = 5u16;
+        let h = 3u16;
+        let tiles = vec![TileKind::Empty; (w * h) as usize];
+        let elements = vec![
+            (Cell::new(1, 1), robbo_at(Cell::new(1, 1))),
+            (
+                Cell::new(0, 1),
+                ElementState::new(2, ElementKind::Butterfly, Direction::Right),
+            ),
+        ];
+        let mut world = make_world(w, h, tiles, elements, 0);
+        for _ in 0..8 {
+            world.step(PlayerInput::Wait);
+        }
+        let robbo = world.robbo_cell().unwrap();
+        assert!(
+            !world
+                .elements
+                .iter()
+                .any(|(c, s)| matches!(s.kind, ElementKind::Butterfly) && *c == robbo),
+            "butterfly must not occupy robbo's cell (gnurobbo can_move)"
+        );
+    }
 }

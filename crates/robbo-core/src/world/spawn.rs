@@ -79,11 +79,13 @@ impl World {
                     QuestionMarkContent::Butterfly => ElementKind::Butterfly,
                     _ => unreachable!(),
                 };
+                let direction = if matches!(kind, ElementKind::Butterfly) {
+                    Direction::Right
+                } else {
+                    Direction::Down
+                };
                 let id = self.allocate_id();
-                self.elements.push((
-                    at,
-                    ElementState::new(id, kind, Direction::Down),
-                ));
+                self.elements.push((at, ElementState::new(id, kind, direction)));
             }
         }
         events.push(GameEvent::Revealed { at });
