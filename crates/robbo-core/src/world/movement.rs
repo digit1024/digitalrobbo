@@ -216,12 +216,6 @@ impl World {
                 }
                 continue;
             };
-            if portal_cell == entry {
-                if search_index == start_index {
-                    return false;
-                }
-                continue;
-            }
 
             let mut dir_idx = Self::direction_to_gnurobbo(robbo_dir);
             for attempt in 0..4 {

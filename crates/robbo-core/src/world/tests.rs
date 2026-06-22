@@ -227,7 +227,7 @@ mod tests {
     }
 
     #[test]
-    fn teleport_blocked_exit_stays() {
+    fn teleport_partner_blocked_falls_back_to_entry_pass_through() {
         let w = 6u16;
         let h = 5u16;
         let mut tiles = vec![TileKind::Empty; (w * h) as usize];
@@ -261,7 +261,62 @@ mod tests {
         ];
         let mut world = make_world(w, h, tiles, elements, 0);
         world.step(PlayerInput::Move(Direction::Right));
-        assert_eq!(world.robbo_cell(), Some(Cell::new(0, 1)));
+        // Partner exits blocked; GNU tries entry mirror pass-through (up).
+        assert_eq!(world.robbo_cell(), Some(Cell::new(1, 0)));
+    }
+
+    #[test]
+    fn lone_teleport_passes_through_to_far_side() {
+        let w = 6u16;
+        let h = 3u16;
+        let tiles = vec![TileKind::Empty; (w * h) as usize];
+        let elements = vec![
+            (Cell::new(1, 1), robbo_at(Cell::new(1, 1))),
+            (
+                Cell::new(2, 1),
+                ElementState::new(
+                    2,
+                    ElementKind::Teleport {
+                        group: 3,
+                        pair_index: 0,
+                    },
+                    Direction::Down,
+                ),
+            ),
+        ];
+        let mut world = make_world(w, h, tiles, elements, 0);
+        world.step(PlayerInput::Move(Direction::Right));
+        assert_eq!(world.robbo_cell(), Some(Cell::new(3, 1)));
+    }
+
+    #[test]
+    fn lone_teleport_blocked_when_all_exits_occupied() {
+        let w = 6u16;
+        let h = 3u16;
+        let mut tiles = vec![TileKind::Empty; (w * h) as usize];
+        tiles[2] = TileKind::WallSolid; // (2, 0)
+        tiles[14] = TileKind::WallSolid; // (2, 2)
+        let elements = vec![
+            (Cell::new(1, 1), robbo_at(Cell::new(1, 1))),
+            (
+                Cell::new(2, 1),
+                ElementState::new(
+                    2,
+                    ElementKind::Teleport {
+                        group: 3,
+                        pair_index: 0,
+                    },
+                    Direction::Down,
+                ),
+            ),
+            (
+                Cell::new(3, 1),
+                ElementState::new(3, ElementKind::Box, Direction::Down),
+            ),
+        ];
+        let mut world = make_world(w, h, tiles, elements, 0);
+        world.step(PlayerInput::Move(Direction::Right));
+        assert_eq!(world.robbo_cell(), Some(Cell::new(1, 1)));
     }
 
     #[test]
