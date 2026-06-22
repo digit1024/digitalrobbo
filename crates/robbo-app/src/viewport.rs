@@ -23,11 +23,51 @@ pub fn world_scale(window: &Window) -> f32 {
 
 /// Map a design-space point (top-left origin) to world translation (center origin, Y up).
 pub fn design_to_world(pos: Vec2, window: &Window) -> Vec2 {
-    let s = world_scale(window);
+    design_to_world_scaled(pos, cover_scale(window, DESIGN_WIDTH, DESIGN_HEIGHT))
+}
+
+/// Same as [`design_to_world`] but with an explicit uniform scale (e.g. background cover).
+pub fn design_to_world_scaled(pos: Vec2, scale: f32) -> Vec2 {
     Vec2::new(
-        (pos.x - DESIGN_WIDTH / 2.0) * s,
-        (DESIGN_HEIGHT / 2.0 - pos.y) * s,
+        (pos.x - DESIGN_WIDTH / 2.0) * scale,
+        (DESIGN_HEIGHT / 2.0 - pos.y) * scale,
     )
+}
+
+/// Bottom edge of the viewport in world units (Camera2d, center origin).
+pub fn world_bottom_y(window: &Window) -> f32 {
+    -window.height() * 0.5
+}
+
+/// Map design pixel coords to screen-space UI offsets (top-left origin).
+pub fn design_to_screen(pos: Vec2, window: &Window) -> Vec2 {
+    Vec2::new(
+        pos.x * window.width() / DESIGN_WIDTH,
+        pos.y * window.height() / DESIGN_HEIGHT,
+    )
+}
+
+/// Pause / main menu item label size (`game_menus` pause panel).
+pub fn menu_item_font_size(window: &Window) -> f32 {
+    28.0 * ui_scale(window)
+}
+
+/// Pause / main menu title size.
+pub fn menu_title_font_size(window: &Window) -> f32 {
+    34.0 * ui_scale(window)
+}
+
+/// Secondary hint / stat line size (victory rows).
+pub fn menu_hint_font_size(window: &Window) -> f32 {
+    22.0 * ui_scale(window)
+}
+
+pub fn menu_text_color() -> Color {
+    Color::srgb(0.95, 0.95, 1.0)
+}
+
+pub fn menu_title_text_color() -> Color {
+    Color::srgb(0.97, 0.97, 1.0)
 }
 
 /// Design-space center (equivalent to cocos `visibleSize / 2`).

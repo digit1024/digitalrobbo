@@ -6,7 +6,6 @@ use crate::audio::AudioGate;
 use crate::bridge::{CoreBridge, LoadLevelEvent, ReloadVisualsEvent};
 use crate::game_menus::{dismiss_game_menu, GameMenuRoot};
 use crate::levels::{LevelRegistry, LevelSelection};
-use crate::menu::MenuSelection;
 use crate::persistence::{GameSave, persist_save};
 use crate::ui::LevelCountdown;
 
@@ -63,21 +62,7 @@ fn resolve_last_level(
     save: &GameSave,
     selection: &mut LevelSelection,
 ) {
-    if !save.0.profile.last_pack.is_empty() {
-        if let Some((pi, pack)) = registry
-            .packs
-            .iter()
-            .enumerate()
-            .find(|(_, p)| p.name == save.0.profile.last_pack)
-        {
-            selection.pack_index = pi;
-            let level_idx = save.0.profile.last_level.saturating_sub(1) as usize;
-            selection.level_index = level_idx.min(pack.levels.len().saturating_sub(1));
-            return;
-        }
-    }
-    selection.pack_index = 0;
-    selection.level_index = 0;
+    crate::levels::resolve_last_level(registry, &save.0.profile, selection);
 }
 
 struct DirKeys {
@@ -183,7 +168,6 @@ pub fn keyboard_input(
     state: Res<State<AppState>>,
     mut next: ResMut<NextState<AppState>>,
     mut selection: ResMut<LevelSelection>,
-    menu_selection: Res<MenuSelection>,
     registry: Res<LevelRegistry>,
     mut load_events: EventWriter<LoadLevelEvent>,
     mut reload: EventWriter<ReloadVisualsEvent>,
@@ -201,30 +185,7 @@ pub fn keyboard_input(
 
     match state.get() {
         AppState::Intro | AppState::Boot => {}
-        AppState::MainMenu => {
-            if menu_blocked {
-                return;
-            }
-            if keys.just_pressed(KeyCode::Enter) {
-                match menu_selection.index {
-                    0 => {
-                        resolve_last_level(&registry, &save, &mut selection);
-                        if let Some(pack) = registry.pack_by_index(selection.pack_index) {
-                            if let Some(level) = pack.levels.get(selection.level_index) {
-                                save.0.profile.last_pack = pack.name.clone();
-                                save.0.profile.last_level = level.index;
-                                persist_save(&save.0);
-                            }
-                        }
-                        load_events.send(LoadLevelEvent { restart: false });
-                        begin_playing(&mut cooldown);
-                        next.set(AppState::Playing);
-                    }
-                    1 => next.set(AppState::LevelSelect),
-                    _ => {}
-                }
-            }
-        }
+        AppState::MainMenu => {}
         AppState::LevelSelect => {
             if menu_blocked {
                 return;

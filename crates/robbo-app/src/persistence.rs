@@ -123,6 +123,12 @@ impl SaveStorage for WebSaveStorage {
 #[derive(Resource)]
 pub struct GameFont(pub Handle<Font>);
 
+pub fn load_game_font(asset_server: Res<AssetServer>, mut commands: Commands) {
+    commands.insert_resource(GameFont(
+        asset_server.load("fonts/MarkerFelt.ttf"),
+    ));
+}
+
 #[derive(Resource)]
 pub struct GameSave(pub SaveData);
 

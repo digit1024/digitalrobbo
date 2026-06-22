@@ -47,10 +47,12 @@ use hud::{cleanup_level_hud, hud_button_input, spawn_level_hud, update_level_hud
 use input::{apply_test_input, InputCooldown, SteeringState, TestInputInject};
 use levels::{LevelRegistry, LevelSelection};
 use menu::{
-    animate_menu_planet, cleanup_main_menu, load_game_font, menu_navigate, spawn_main_menu,
-    update_menu_highlight, MenuSelection,
+    animate_planet, cleanup_main_menu, keyboard_input as main_menu_keyboard,
+    pointer_input as main_menu_pointer, refresh_ui_if_dirty, spawn_main_menu,
+    track_main_menu_layout, update_highlight,
+    update_level_select_labels_system, update_settings_labels, MainMenuState, MainMenuUiDirty,
 };
-use persistence::{GameSave, load_save};
+use persistence::{load_game_font, GameSave, load_save};
 use projection::ActiveProjection;
 use ui::{LevelCountdown, SpeedrunTimer};
 
@@ -104,7 +106,8 @@ fn configure_app(app: &mut App, allow_any_thread: bool) {
         .insert_resource(GameSave(load_save()))
         .insert_resource(SpeedrunTimer::default())
         .insert_resource(LevelCountdown::default())
-        .insert_resource(MenuSelection::default())
+        .insert_resource(MainMenuState::default())
+        .insert_resource(MainMenuUiDirty::default())
         .insert_resource(InputCooldown::default())
         .insert_resource(SteeringState::default())
         .insert_resource(TestInputInject::default())
@@ -160,13 +163,25 @@ fn configure_app(app: &mut App, allow_any_thread: bool) {
                 ui_anim::tick_ui_fade,
                 hud_button_input,
                 game_menu_button_input,
-                animate_menu_planet,
-                update_menu_highlight,
-                menu_navigate,
                 editor::editor_toggle,
                 iso::toggle_isometric,
                 camera::zoom_keyboard_input,
                 camera::handle_zoom_buttons,
+            ),
+        )
+        .add_systems(
+            Update,
+            (
+                main_menu_keyboard,
+                main_menu_pointer,
+                animate_planet,
+                update_highlight,
+                update_settings_labels,
+                update_level_select_labels_system,
+                refresh_ui_if_dirty
+                    .after(main_menu_keyboard)
+                    .after(main_menu_pointer),
+                track_main_menu_layout,
             ),
         )
         .add_systems(

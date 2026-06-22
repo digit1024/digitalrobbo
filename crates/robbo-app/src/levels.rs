@@ -76,6 +76,29 @@ impl LevelSelection {
     }
 }
 
+/// Restore pack/level from profile when starting the last game.
+pub fn resolve_last_level(
+    registry: &LevelRegistry,
+    profile: &crate::persistence::ProfileData,
+    selection: &mut LevelSelection,
+) {
+    if !profile.last_pack.is_empty() {
+        if let Some((pi, pack)) = registry
+            .packs
+            .iter()
+            .enumerate()
+            .find(|(_, p)| p.name == profile.last_pack)
+        {
+            selection.pack_index = pi;
+            let level_idx = profile.last_level.saturating_sub(1) as usize;
+            selection.level_index = level_idx.min(pack.levels.len().saturating_sub(1));
+            return;
+        }
+    }
+    selection.pack_index = 0;
+    selection.level_index = 0;
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
