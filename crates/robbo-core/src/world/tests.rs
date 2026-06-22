@@ -2,7 +2,7 @@
 mod tests {
     use super::super::*;
     use crate::command::CommandHistory;
-    use crate::element::{ElementKind, ElementState, GunType, QuestionMarkContent};
+    use crate::element::{BirdVariant, ElementKind, ElementState, GunType, QuestionMarkContent};
     use crate::events::{DeathCause, GameEvent, PlayerInput};
     use crate::tile::TileKind;
     use crate::world::{LevelStatus, World};
@@ -488,6 +488,158 @@ mod tests {
         world.step(PlayerInput::Shoot(Direction::Right));
         assert_eq!(world.ammo, 0);
         assert_eq!(world.tile_at(Cell::new(2, 1)), Some(TileKind::Empty));
+    }
+
+    #[test]
+    fn adjacent_shot_into_double_ground_does_not_hit_behind() {
+        // Robbo | Ground | Ground | Box — point-blank shot must not reach the box.
+        let w = 6u16;
+        let h = 3u16;
+        let mut tiles = vec![TileKind::Empty; (w * h) as usize];
+        tiles[7] = TileKind::Ground;  // (2, 1)
+        tiles[8] = TileKind::Ground;  // (3, 1)
+        let elements = vec![
+            (Cell::new(1, 1), robbo_at(Cell::new(1, 1))),
+            (
+                Cell::new(4, 1),
+                ElementState::new(2, ElementKind::Box, Direction::Down),
+            ),
+        ];
+        let mut world = make_world(w, h, tiles, elements, 0);
+        world.ammo = 1;
+        world.turn_robbo(Direction::Right);
+        world.step(PlayerInput::Shoot(Direction::Right));
+
+        assert_eq!(world.ammo, 0);
+        assert_eq!(world.tile_at(Cell::new(2, 1)), Some(TileKind::Empty));
+        assert!(
+            world
+                .elements
+                .iter()
+                .any(|(c, s)| *c == Cell::new(4, 1) && matches!(s.kind, ElementKind::Box)),
+            "box behind double ground should survive adjacent shot"
+        );
+    }
+
+    #[test]
+    fn adjacent_shot_into_single_ground_does_not_hit_box_behind() {
+        // Robbo | Ground | Box
+        let w = 5u16;
+        let h = 3u16;
+        let mut tiles = vec![TileKind::Empty; (w * h) as usize];
+        tiles[7] = TileKind::Ground; // (2, 1)
+        let elements = vec![
+            (Cell::new(1, 1), robbo_at(Cell::new(1, 1))),
+            (
+                Cell::new(3, 1),
+                ElementState::new(2, ElementKind::Box, Direction::Down),
+            ),
+        ];
+        let mut world = make_world(w, h, tiles, elements, 0);
+        world.ammo = 1;
+        world.turn_robbo(Direction::Right);
+        world.step(PlayerInput::Shoot(Direction::Right));
+
+        assert!(
+            world
+                .elements
+                .iter()
+                .any(|(c, s)| *c == Cell::new(3, 1) && matches!(s.kind, ElementKind::Box)),
+            "box one cell behind ground should survive point-blank shot"
+        );
+    }
+
+    #[test]
+    fn adjacent_shot_into_double_ground_does_not_hit_bird_on_second_ground() {
+        // Robbo | Ground | Ground+Bird
+        let w = 6u16;
+        let h = 3u16;
+        let mut tiles = vec![TileKind::Empty; (w * h) as usize];
+        tiles[7] = TileKind::Ground; // (2, 1)
+        tiles[8] = TileKind::Ground; // (3, 1)
+        let elements = vec![
+            (Cell::new(1, 1), robbo_at(Cell::new(1, 1))),
+            (
+                Cell::new(3, 1),
+                ElementState::new(
+                    2,
+                    ElementKind::Bird {
+                        variant: BirdVariant::Horizontal,
+                        shooting: false,
+                    },
+                    Direction::Down,
+                ),
+            ),
+        ];
+        let mut world = make_world(w, h, tiles, elements, 0);
+        world.ammo = 1;
+        world.turn_robbo(Direction::Right);
+        world.step(PlayerInput::Shoot(Direction::Right));
+
+        assert!(
+            world
+                .elements
+                .iter()
+                .any(|(c, s)| *c == Cell::new(3, 1) && matches!(s.kind, ElementKind::Bird { .. })),
+            "bird on second ground tile should survive adjacent shot"
+        );
+    }
+
+    #[test]
+    fn adjacent_shot_into_single_ground_does_not_hit_screw_behind() {
+        // Robbo | Ground | Screw — adjacent shot should only clear dirt, not reach screw.
+        let w = 5u16;
+        let h = 3u16;
+        let mut tiles = vec![TileKind::Empty; (w * h) as usize];
+        tiles[7] = TileKind::Ground; // (2, 1)
+        let elements = vec![
+            (Cell::new(1, 1), robbo_at(Cell::new(1, 1))),
+            (
+                Cell::new(3, 1),
+                ElementState::new(2, ElementKind::Screw, Direction::Down),
+            ),
+        ];
+        let mut world = make_world(w, h, tiles, elements, 0);
+        world.ammo = 1;
+        world.turn_robbo(Direction::Right);
+        world.step(PlayerInput::Shoot(Direction::Right));
+
+        assert!(
+            world
+                .elements
+                .iter()
+                .any(|(c, s)| *c == Cell::new(3, 1) && matches!(s.kind, ElementKind::Screw)),
+            "screw one cell behind ground should survive point-blank shot"
+        );
+    }
+
+    #[test]
+    fn adjacent_shot_into_double_ground_does_not_hit_screw_on_second_ground() {
+        // Robbo | Ground | Ground+Screw — screw sitting on second dirt tile.
+        let w = 6u16;
+        let h = 3u16;
+        let mut tiles = vec![TileKind::Empty; (w * h) as usize];
+        tiles[7] = TileKind::Ground; // (2, 1)
+        tiles[8] = TileKind::Ground; // (3, 1)
+        let elements = vec![
+            (Cell::new(1, 1), robbo_at(Cell::new(1, 1))),
+            (
+                Cell::new(3, 1),
+                ElementState::new(2, ElementKind::Screw, Direction::Down),
+            ),
+        ];
+        let mut world = make_world(w, h, tiles, elements, 0);
+        world.ammo = 1;
+        world.turn_robbo(Direction::Right);
+        world.step(PlayerInput::Shoot(Direction::Right));
+
+        assert!(
+            world
+                .elements
+                .iter()
+                .any(|(c, s)| *c == Cell::new(3, 1) && matches!(s.kind, ElementKind::Screw)),
+            "screw on second ground tile should survive adjacent shot"
+        );
     }
 
     #[test]

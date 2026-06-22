@@ -310,6 +310,7 @@ impl World {
             .is_some_and(Self::is_tile_shot_destroyable)
         {
             self.clear_blowable_tile(target, events);
+            return;
         }
 
         self.gun_shoot(from, dir, GunType::Regular, None, events, false);
