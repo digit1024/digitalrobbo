@@ -173,7 +173,10 @@ fn configure_app(app: &mut App, allow_any_thread: bool) {
             Update,
             update_projectile_visuals.after(render::update_entity_transforms),
         )
-        .add_systems(OnEnter(AppState::Playing), spawn_level_hud)
+        .add_systems(
+            OnEnter(AppState::Playing),
+            (cleanup_level_hud, spawn_level_hud).chain(),
+        )
         .add_systems(
             OnExit(AppState::Playing),
             (cleanup_level_hud, ui::cleanup_countdown_overlay, stop_bgm, cleanup_enemy_ambient_sounds),
@@ -181,6 +184,7 @@ fn configure_app(app: &mut App, allow_any_thread: bool) {
         .add_systems(
             OnEnter(AppState::MainMenu),
             (
+                cleanup_level_hud,
                 render::teardown_level_scene,
                 render::reset_sim_on_menu,
                 spawn_main_menu,
@@ -193,6 +197,7 @@ fn configure_app(app: &mut App, allow_any_thread: bool) {
         .add_systems(
             OnEnter(AppState::LevelSelect),
             (
+                cleanup_level_hud,
                 render::teardown_level_scene,
                 render::reset_sim_on_menu,
                 spawn_game_menu,

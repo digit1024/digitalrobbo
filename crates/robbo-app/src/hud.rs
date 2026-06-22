@@ -32,7 +32,14 @@ pub fn spawn_level_hud(
     asset_server: Res<AssetServer>,
     font: Res<GameFont>,
     window: Query<&Window, With<PrimaryWindow>>,
+    existing: Query<Entity, With<HudRoot>>,
 ) {
+    if !existing.is_empty() {
+        bevy::log::warn!("spawn_level_hud: clearing stale HUD before respawn");
+        for entity in existing.iter().collect::<Vec<_>>() {
+            commands.entity(entity).despawn_recursive();
+        }
+    }
     let Ok(window) = window.get_single() else {
         return;
     };
@@ -269,7 +276,7 @@ pub fn hud_button_input(
 }
 
 pub fn cleanup_level_hud(mut commands: Commands, q: Query<Entity, With<HudRoot>>) {
-    for entity in &q {
-        commands.entity(entity).despawn();
+    for entity in q.iter().collect::<Vec<_>>() {
+        commands.entity(entity).despawn_recursive();
     }
 }
