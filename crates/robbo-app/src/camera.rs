@@ -90,6 +90,23 @@ pub fn reset_camera_on_level_load(
     }
 }
 
+/// Main-menu sprites assume a centered Camera2d at scale 1.0 — restore after gameplay.
+pub fn reset_camera_for_menu(
+    mut cam_state: ResMut<CameraState>,
+    mut camera: Query<&mut Transform, With<Camera2d>>,
+) {
+    cam_state.zoom_level = 0;
+    cam_state.smoothed_zoom_level = 0.0;
+    cam_state.smoothed_pos = Vec2::ZERO;
+    cam_state.needs_snap = true;
+
+    for mut transform in &mut camera {
+        transform.translation = Vec3::ZERO;
+        transform.rotation = Quat::IDENTITY;
+        transform.scale = Vec3::ONE;
+    }
+}
+
 pub fn zoom_keyboard_input(
     keys: Res<ButtonInput<KeyCode>>,
     state: Res<State<AppState>>,

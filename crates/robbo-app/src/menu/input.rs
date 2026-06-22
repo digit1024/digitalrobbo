@@ -27,7 +27,7 @@ const COLOR_SELECTED: Color = Color::srgb(1.0, 1.0, 1.0);
 pub fn animate_planet(
     time: Res<Time>,
     state: Res<State<AppState>>,
-    layout: Option<Res<MainMenuLayout>>,
+    mut layout_res: Option<ResMut<MainMenuLayout>>,
     window: Query<&Window, With<bevy::window::PrimaryWindow>>,
     mut backgrounds: Query<&mut Transform, (With<MainMenuBackground>, Without<MainMenuPlanet>)>,
     mut planets: Query<&mut Transform, With<MainMenuPlanet>>,
@@ -35,13 +35,17 @@ pub fn animate_planet(
     if *state.get() != AppState::MainMenu {
         return;
     }
-    let Some(layout) = layout else {
+    let Ok(window) = window.get_single() else {
         return;
     };
-    if let Ok(window) = window.get_single() {
-        for mut tf in &mut backgrounds {
-            *tf = viewport::cover_transform(window, crate::viewport::DESIGN_WIDTH, crate::viewport::DESIGN_HEIGHT);
-        }
+
+    let layout = MainMenuLayout::from_window(window);
+    if let Some(mut res) = layout_res {
+        *res = layout;
+    }
+
+    for mut tf in &mut backgrounds {
+        *tf = viewport::cover_transform(window, viewport::DESIGN_WIDTH, viewport::DESIGN_HEIGHT);
     }
     for mut tf in &mut planets {
         tf.scale = Vec3::splat(layout.cover);

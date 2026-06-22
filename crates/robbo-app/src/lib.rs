@@ -207,6 +207,7 @@ fn configure_app(app: &mut App, allow_any_thread: bool) {
                 cleanup_level_hud,
                 render::teardown_level_scene,
                 render::reset_sim_on_menu,
+                camera::reset_camera_for_menu,
                 spawn_main_menu,
                 play_menu_bgm,
                 log_state::<AppState>,
