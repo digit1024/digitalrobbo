@@ -43,7 +43,8 @@ fn spawn_particle(
         FxParticleState::new(velocity, duration, 1.0, drag),
     ));
     if let Some(root) = level_root {
-        entity.set_parent(root);
+        let id = entity.id();
+        commands.entity(root).add_child(id);
     }
 }
 

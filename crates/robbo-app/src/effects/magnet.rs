@@ -41,7 +41,7 @@ pub fn reset_magnet_beams(beams: &mut MagnetBeams) {
 }
 
 pub fn reset_magnet_beams_on_reload(
-    mut reload: EventReader<ReloadVisualsEvent>,
+    mut reload: MessageReader<ReloadVisualsEvent>,
     mut beams: ResMut<MagnetBeams>,
 ) {
     if reload.read().next().is_some() {

@@ -25,7 +25,7 @@ const TELEPORT_AURA_SPAWN_SECS: f32 = 0.14;
 /// Rebuild teleport aura anchors when the level visuals reload.
 pub fn sync_fx_auras(
     mut commands: Commands,
-    mut reload: EventReader<ReloadVisualsEvent>,
+    mut reload: MessageReader<ReloadVisualsEvent>,
     bridge: Res<CoreBridge>,
     projection: Res<ActiveProjection>,
     level_roots: Query<Entity, With<LevelRoot>>,

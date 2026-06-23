@@ -43,7 +43,7 @@ pub fn spawn_game_menu(
 ) {
     dismiss_game_menu(&mut commands, &existing);
 
-    let Ok(window) = window.get_single() else {
+    let Ok(window) = window.single() else {
         return;
     };
     match state.get() {
@@ -78,7 +78,7 @@ fn menu_scale(window: &Window) -> f32 {
     (max_w / PANEL_W).min(1.0) * scale
 }
 
-fn spawn_backdrop(parent: &mut ChildBuilder) {
+fn spawn_backdrop(parent: &mut ChildSpawnerCommands) {
     parent.spawn((
         Node {
             position_type: PositionType::Absolute,
@@ -430,7 +430,7 @@ fn spawn_level_select_menu(
     ));
 }
 
-fn spawn_title(parent: &mut ChildBuilder, font: &GameFont, font_size: f32, text: &str) {
+fn spawn_title(parent: &mut ChildSpawnerCommands, font: &GameFont, font_size: f32, text: &str) {
     parent.spawn((
         Text::new(text),
         TextFont {
@@ -446,7 +446,7 @@ fn spawn_title(parent: &mut ChildBuilder, font: &GameFont, font_size: f32, text:
     ));
 }
 
-fn spawn_stat_row(parent: &mut ChildBuilder, font: &GameFont, font_size: f32, label: &str, value: &str) {
+fn spawn_stat_row(parent: &mut ChildSpawnerCommands, font: &GameFont, font_size: f32, label: &str, value: &str) {
     parent
         .spawn((
             Node {
@@ -481,7 +481,7 @@ fn spawn_stat_row(parent: &mut ChildBuilder, font: &GameFont, font_size: f32, la
 }
 
 fn spawn_text_button(
-    parent: &mut ChildBuilder,
+    parent: &mut ChildSpawnerCommands,
     font: &GameFont,
     font_size: f32,
     label: &str,
@@ -511,7 +511,7 @@ fn spawn_text_button(
 }
 
 fn spawn_icon_button(
-    parent: &mut ChildBuilder,
+    parent: &mut ChildSpawnerCommands,
     asset_server: &AssetServer,
     size: f32,
     icon_path: &str,
@@ -533,7 +533,7 @@ fn spawn_icon_button(
         .with_children(|btn| {
             btn.spawn((
                 ImageNode {
-                    image: asset_server.load(icon_path),
+                    image: asset_server.load(icon_path.to_string()),
                     ..default()
                 },
                 Node {
@@ -589,7 +589,7 @@ pub fn update_level_select_menu(
 
 pub fn dismiss_game_menu(commands: &mut Commands, roots: &Query<Entity, With<GameMenuRoot>>) {
     for entity in roots.iter().collect::<Vec<_>>() {
-        commands.entity(entity).despawn_recursive();
+        commands.entity(entity).despawn();
     }
 }
 
@@ -599,7 +599,7 @@ pub fn game_menu_button_input(
     menu_roots: Query<Entity, With<GameMenuRoot>>,
     mut interactions: Query<(&Interaction, &GameMenuAction), Changed<Interaction>>,
     mut next: ResMut<NextState<AppState>>,
-    mut load_events: EventWriter<LoadLevelEvent>,
+    mut load_events: MessageWriter<LoadLevelEvent>,
     mut cooldown: ResMut<InputCooldown>,
     mut selection: ResMut<LevelSelection>,
     registry: Res<LevelRegistry>,
@@ -614,7 +614,7 @@ pub fn game_menu_button_input(
                 true
             }
             (AppState::Paused, GameMenuAction::Restart) => {
-                load_events.send(LoadLevelEvent { restart: true });
+                load_events.write(LoadLevelEvent { restart: true });
                 next.set(AppState::Playing);
                 cooldown.frames_remaining = 0;
                 true
@@ -625,7 +625,7 @@ pub fn game_menu_button_input(
             }
 
             (AppState::LevelComplete, GameMenuAction::Restart) => {
-                load_events.send(LoadLevelEvent { restart: true });
+                load_events.write(LoadLevelEvent { restart: true });
                 begin_playing(&mut cooldown);
                 next.set(AppState::Playing);
                 true
@@ -634,7 +634,7 @@ pub fn game_menu_button_input(
                 if let Some(pack) = registry.pack_by_index(selection.pack_index) {
                     if selection.level_index + 1 < pack.levels.len() {
                         selection.level_index += 1;
-                        load_events.send(LoadLevelEvent { restart: false });
+                        load_events.write(LoadLevelEvent { restart: false });
                         begin_playing(&mut cooldown);
                         next.set(AppState::Playing);
                         true
@@ -657,7 +657,7 @@ pub fn game_menu_button_input(
             }
 
             (AppState::GameOver, GameMenuAction::Retry) => {
-                load_events.send(LoadLevelEvent { restart: true });
+                load_events.write(LoadLevelEvent { restart: true });
                 begin_playing(&mut cooldown);
                 next.set(AppState::Playing);
                 true

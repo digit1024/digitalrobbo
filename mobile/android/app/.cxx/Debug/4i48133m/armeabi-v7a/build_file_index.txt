@@ -1,1 +1,0 @@
-/home/digit1024/proj/digitalrobbo/mobile/android/app/CMakeLists.txt

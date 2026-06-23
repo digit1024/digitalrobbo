@@ -131,7 +131,7 @@ pub fn spawn_intro(
     if sequence.is_none() {
         return;
     }
-    let Ok(window) = window.get_single() else {
+    let Ok(window) = window.single() else {
         return;
     };
     spawned.0 = true;
@@ -228,7 +228,7 @@ pub fn update_intro_sequence(
     }
 
     sequence.timer.tick(time.delta());
-    if !sequence.timer.finished() {
+    if !sequence.timer.is_finished() {
         return;
     }
 
@@ -272,7 +272,7 @@ pub fn update_intro_sequence(
             let title_font = layout
                 .as_ref()
                 .map(|l| l.title_font)
-                .or_else(|| window.get_single().ok().map(|w| layout_from_window(w).title_font))
+                .or_else(|| window.single().ok().map(|w| layout_from_window(w).title_font))
                 .unwrap_or(56.0);
             commands.spawn((
                 Text::new("DIGIT ADVENTURES"),
@@ -367,7 +367,7 @@ pub fn intro_title_fly(
     }
     let ui_scale = layout
         .map(|l| l.ui_scale)
-        .or_else(|| window.get_single().ok().map(viewport::ui_scale))
+        .or_else(|| window.single().ok().map(viewport::ui_scale))
         .unwrap_or(1.0);
     let t = sequence.timer.fraction().clamp(0.0, 1.0);
     let lift = t * ui_scale * 420.0;

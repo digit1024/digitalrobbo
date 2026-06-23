@@ -15,7 +15,7 @@ use super::presets::{spawn_explosion_burst, spawn_shot_fx, spawn_teleport_burst}
 pub fn fx_on_core_events(
     state: Res<State<AppState>>,
     mut commands: Commands,
-    mut reader: EventReader<CoreGameEvent>,
+    mut reader: MessageReader<CoreGameEvent>,
     projection: Res<ActiveProjection>,
     assets: Option<Res<SpriteAssets>>,
     level_roots: Query<Entity, With<LevelRoot>>,
@@ -91,7 +91,7 @@ pub fn tick_fx_particles(
         transform.scale = Vec3::splat(scale.max(0.05));
         sprite.color = sprite.color.with_alpha((1.0 - t).max(0.0));
 
-        if state.lifetime.finished() {
+        if state.lifetime.is_finished() {
             commands.entity(entity).despawn();
         }
     }

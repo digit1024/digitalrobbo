@@ -36,9 +36,10 @@ use audio::{
 };
 use bevy::log::LogPlugin;
 use bevy::prelude::*;
-use bevy::winit::{WakeUp, WinitPlugin};
+use bevy::window::WindowResolution;
 #[cfg(target_os = "android")]
 use bevy::winit::WinitSettings;
+use bevy::winit::WinitPlugin;
 use bridge::{CoreBridge, EntityMap, GameSession, GameTickTimer, LoadLevelEvent, ReloadVisualsEvent, TileEntityMap};
 use effects::{
     fx_on_core_events, reset_magnet_beams_on_reload, sync_fx_auras, tick_collect_pop_effects,
@@ -58,7 +59,7 @@ use menu::{
     track_main_menu_layout, update_highlight,
     update_level_select_labels_system, update_settings_labels, MainMenuState, MainMenuUiDirty,
 };
-use persistence::{load_game_font, GameSave, SaveBackend, load_save};
+use persistence::{load_game_font, restore_session_from_save, GameSave, SaveBackend, load_save};
 use projection::ActiveProjection;
 use ui::{LevelCountdown, SpeedrunTimer};
 
@@ -114,13 +115,13 @@ fn configure_app(app: &mut App, allow_any_thread: bool) {
         .set(WindowPlugin {
             primary_window: Some(Window {
                 title: "DigitalRobbo".into(),
-                resolution: (1280.0, 720.0).into(),
+                resolution: WindowResolution::new(1280, 720),
                 ..default()
             }),
             ..default()
         });
     if allow_any_thread {
-        let mut winit = WinitPlugin::<WakeUp>::default();
+        let mut winit = WinitPlugin::default();
         winit.run_on_any_thread = true;
         plugins = plugins.set(winit);
     }
@@ -148,9 +149,9 @@ fn configure_app(app: &mut App, allow_any_thread: bool) {
         .insert_resource(editor::EditorState::default())
         .init_resource::<bridge::RenderAudit>()
         .init_resource::<MagnetBeams>()
-        .add_event::<bridge::CoreGameEvent>()
-        .add_event::<LoadLevelEvent>()
-        .add_event::<ReloadVisualsEvent>()
+        .add_message::<bridge::CoreGameEvent>()
+        .add_message::<LoadLevelEvent>()
+        .add_message::<ReloadVisualsEvent>()
         .add_systems(
             Startup,
             (
@@ -158,6 +159,7 @@ fn configure_app(app: &mut App, allow_any_thread: bool) {
                 load_audio_manifest,
                 camera::load_camera_config,
                 load_game_font,
+                restore_session_from_save,
             ),
         )
         .add_systems(
@@ -208,15 +210,11 @@ fn configure_app(app: &mut App, allow_any_thread: bool) {
         .add_systems(
             Update,
             (
-                main_menu_keyboard,
-                main_menu_pointer,
+                (main_menu_keyboard, main_menu_pointer, refresh_ui_if_dirty).chain(),
                 animate_planet,
                 update_highlight,
                 update_settings_labels,
                 update_level_select_labels_system,
-                refresh_ui_if_dirty
-                    .after(main_menu_keyboard)
-                    .after(main_menu_pointer),
                 track_main_menu_layout,
             ),
         )
@@ -306,6 +304,7 @@ fn configure_app(app: &mut App, allow_any_thread: bool) {
                 render::update_tile_vanish_effects,
                 render::update_teleport_reveal,
             )
+                .chain()
                 .after(bridge::game_tick_system)
                 .after(render::sync_visuals)
                 .before(interpolation::advance_interpolation_system),

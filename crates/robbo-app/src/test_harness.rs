@@ -47,7 +47,7 @@ impl GameTestHarness {
             world.resource_mut::<LevelSelection>().pack_index = pack_index;
             world.resource_mut::<LevelSelection>().level_index = level_index;
             world.resource_mut::<InputCooldown>().frames_remaining = 0;
-            world.send_event(LoadLevelEvent { restart: true });
+            world.write_message(LoadLevelEvent { restart: true });
             world
                 .resource_mut::<NextState<AppState>>()
                 .set(AppState::Playing);
@@ -178,12 +178,12 @@ impl SmokeScenario {
 
 fn smoke_scenario_system(
     mut scenario: ResMut<SmokeScenario>,
-    mut app_exit: EventWriter<AppExit>,
+    mut app_exit: MessageWriter<AppExit>,
     state: Res<State<AppState>>,
     bridge: Res<CoreBridge>,
     mut next: ResMut<NextState<AppState>>,
     mut selection: ResMut<LevelSelection>,
-    mut load: EventWriter<LoadLevelEvent>,
+    mut load: MessageWriter<LoadLevelEvent>,
     mut cooldown: ResMut<InputCooldown>,
     mut keys: ResMut<ButtonInput<KeyCode>>,
     mut commands: Commands,
@@ -196,13 +196,13 @@ fn smoke_scenario_system(
         let after_path = scenario.output_dir.join("level1-after-move.png");
         if !after_path.is_file() {
             scenario.fail(format!("missing screenshot: {}", after_path.display()));
-            app_exit.send(AppExit::Error(std::num::NonZeroU8::new(1).unwrap()));
+            app_exit.write(AppExit::Error(std::num::NonZeroU8::new(1).unwrap()));
             return;
         }
         if scenario.error.is_some() {
-            app_exit.send(AppExit::Error(std::num::NonZeroU8::new(1).unwrap()));
+            app_exit.write(AppExit::Error(std::num::NonZeroU8::new(1).unwrap()));
         } else {
-            app_exit.send(AppExit::Success);
+            app_exit.write(AppExit::Success);
         }
         return;
     }
@@ -226,7 +226,7 @@ fn smoke_scenario_system(
             selection.pack_index = 0;
             selection.level_index = 0;
             cooldown.frames_remaining = 0;
-            load.send(LoadLevelEvent { restart: true });
+            load.write(LoadLevelEvent { restart: true });
             next.set(AppState::Playing);
             scenario.step = SmokeStep::Warmup;
             scenario.wait_frames = 45;

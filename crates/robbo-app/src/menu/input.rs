@@ -35,7 +35,7 @@ pub fn animate_planet(
     if *state.get() != AppState::MainMenu {
         return;
     }
-    let Ok(window) = window.get_single() else {
+    let Ok(window) = window.single() else {
         return;
     };
 
@@ -70,7 +70,7 @@ pub fn refresh_ui_if_dirty(
         return;
     }
     dirty.0 = false;
-    let Ok(window) = window.get_single() else {
+    let Ok(window) = window.single() else {
         return;
     };
     rebuild_ui(
@@ -114,7 +114,7 @@ pub fn update_highlight(
         let selected = item.index == menu_state.selection;
         for (i, child) in children.iter().enumerate() {
             if is_button.is_some() {
-                if let Ok(mut text) = item_texts.get_mut(*child) {
+                if let Ok(mut text) = item_texts.get_mut(child) {
                     let body = text.to_string().trim_start_matches(['>', ' ']).to_string();
                     **text = if selected {
                         format!("> {body}")
@@ -122,7 +122,7 @@ pub fn update_highlight(
                         format!("  {body}")
                     };
                 }
-                if let Ok(mut color) = item_colors.get_mut(*child) {
+                if let Ok(mut color) = item_colors.get_mut(child) {
                     *color = if selected {
                         TextColor(COLOR_SELECTED)
                     } else {
@@ -130,7 +130,7 @@ pub fn update_highlight(
                     };
                 }
             } else if i == 0 {
-                if let Ok(mut color) = item_colors.get_mut(*child) {
+                if let Ok(mut color) = item_colors.get_mut(child) {
                     *color = if selected {
                         TextColor(COLOR_SELECTED)
                     } else {
@@ -232,10 +232,10 @@ pub fn keyboard_input(
     mut save: ResMut<GameSave>,
     backend: Res<SaveBackend>,
     bgm: Res<BgmState>,
-    sinks: Query<&AudioSink>,
+    mut sinks: Query<&mut AudioSink>,
     registry: Res<LevelRegistry>,
     mut level_selection: ResMut<LevelSelection>,
-    mut load_events: EventWriter<LoadLevelEvent>,
+    mut load_events: MessageWriter<LoadLevelEvent>,
     mut cooldown: ResMut<InputCooldown>,
     mut next: ResMut<NextState<AppState>>,
 ) {
@@ -261,7 +261,7 @@ pub fn keyboard_input(
             &mut dirty,
             &mut save,
             &bgm,
-            &sinks,
+            &mut sinks,
             &registry,
             &mut level_selection,
             &mut load_events,
@@ -275,7 +275,7 @@ pub fn keyboard_input(
             &mut dirty,
             &mut save,
             &bgm,
-            &sinks,
+            &mut sinks,
             &registry,
             &mut level_selection,
             &mut load_events,
@@ -296,7 +296,7 @@ pub fn keyboard_input(
                     &mut dirty,
                     &mut save,
                     &bgm,
-                    &sinks,
+                    &mut sinks,
                     &registry,
                     &mut level_selection,
                     &mut load_events,
@@ -315,10 +315,10 @@ fn settings_keys(
     dirty: &mut MainMenuUiDirty,
     save: &mut GameSave,
     bgm: &BgmState,
-    sinks: &Query<&AudioSink>,
+    sinks: &mut Query<&mut AudioSink>,
     registry: &LevelRegistry,
     level_selection: &mut LevelSelection,
-    load_events: &mut EventWriter<LoadLevelEvent>,
+    load_events: &mut MessageWriter<LoadLevelEvent>,
     cooldown: &mut InputCooldown,
     next: &mut NextState<AppState>,
 ) {
@@ -416,10 +416,10 @@ fn level_select_keys(
     dirty: &mut MainMenuUiDirty,
     save: &mut GameSave,
     bgm: &BgmState,
-    sinks: &Query<&AudioSink>,
+    sinks: &mut Query<&mut AudioSink>,
     registry: &LevelRegistry,
     level_selection: &mut LevelSelection,
-    load_events: &mut EventWriter<LoadLevelEvent>,
+    load_events: &mut MessageWriter<LoadLevelEvent>,
     cooldown: &mut InputCooldown,
     next: &mut NextState<AppState>,
 ) {
@@ -483,10 +483,10 @@ pub fn pointer_input(
     mut save: ResMut<GameSave>,
     backend: Res<SaveBackend>,
     bgm: Res<BgmState>,
-    sinks: Query<&AudioSink>,
+    mut sinks: Query<&mut AudioSink>,
     registry: Res<LevelRegistry>,
     mut level_selection: ResMut<LevelSelection>,
-    mut load_events: EventWriter<LoadLevelEvent>,
+    mut load_events: MessageWriter<LoadLevelEvent>,
     mut cooldown: ResMut<InputCooldown>,
     mut next: ResMut<NextState<AppState>>,
     mut interactions: Query<
@@ -512,7 +512,7 @@ pub fn pointer_input(
             &mut dirty,
             &mut save,
             &bgm,
-            &sinks,
+            &mut sinks,
             &registry,
             &mut level_selection,
             &mut load_events,
@@ -529,10 +529,10 @@ fn apply_action(
     dirty: &mut MainMenuUiDirty,
     save: &mut GameSave,
     bgm: &BgmState,
-    sinks: &Query<&AudioSink>,
+    sinks: &mut Query<&mut AudioSink>,
     registry: &LevelRegistry,
     level_selection: &mut LevelSelection,
-    load_events: &mut EventWriter<LoadLevelEvent>,
+    load_events: &mut MessageWriter<LoadLevelEvent>,
     cooldown: &mut InputCooldown,
     next: &mut NextState<AppState>,
 ) {
@@ -590,14 +590,7 @@ fn apply_action(
             }
         }
         MainMenuAction::PlayLevel => {
-            if let Some(pack) = registry.pack_by_index(level_selection.pack_index) {
-                if let Some(level) = pack.levels.get(level_selection.level_index) {
-                    save.0.profile.last_pack = pack.name.clone();
-                    save.0.profile.last_level = level.index;
-                    persist_save(backend, &save.0);
-                }
-            }
-            load_events.send(LoadLevelEvent { restart: false });
+            load_events.write(LoadLevelEvent { restart: false });
             begin_playing(cooldown);
             next.set(AppState::Playing);
         }
@@ -605,23 +598,16 @@ fn apply_action(
 }
 
 fn start_game(
-    backend: &SaveBackend,
+    _backend: &SaveBackend,
     registry: &LevelRegistry,
-    save: &mut GameSave,
+    save: &GameSave,
     selection: &mut LevelSelection,
-    load_events: &mut EventWriter<LoadLevelEvent>,
+    load_events: &mut MessageWriter<LoadLevelEvent>,
     cooldown: &mut InputCooldown,
     next: &mut NextState<AppState>,
 ) {
     resolve_last_level(registry, &save.0.profile, selection);
-    if let Some(pack) = registry.pack_by_index(selection.pack_index) {
-        if let Some(level) = pack.levels.get(selection.level_index) {
-            save.0.profile.last_pack = pack.name.clone();
-            save.0.profile.last_level = level.index;
-            persist_save(backend, &save.0);
-        }
-    }
-    load_events.send(LoadLevelEvent { restart: false });
+    load_events.write(LoadLevelEvent { restart: false });
     begin_playing(cooldown);
     next.set(AppState::Playing);
 }

@@ -6,7 +6,7 @@ use crate::audio::{play_countdown_tick, GameAudio};
 use crate::bridge::{CoreBridge, CoreGameEvent, GameSession, LoadLevelEvent, ReloadVisualsEvent};
 use crate::input::SteeringState;
 use crate::levels::{LevelRegistry, LevelSelection};
-use crate::persistence::{GameSave, LevelProgress, SaveBackend, persist_save};
+use crate::persistence::{GameSave, LevelProgress, SaveBackend, persist_save, record_active_level};
 
 #[derive(Resource, Default)]
 pub struct SpeedrunTimer {
@@ -45,7 +45,7 @@ pub struct CountdownText;
 
 pub fn load_level_system(
     mut commands: Commands,
-    mut events: EventReader<LoadLevelEvent>,
+    mut events: MessageReader<LoadLevelEvent>,
     mut bridge: ResMut<CoreBridge>,
     mut steering: ResMut<SteeringState>,
     mut session: ResMut<GameSession>,
@@ -53,9 +53,10 @@ pub fn load_level_system(
     mut countdown: ResMut<LevelCountdown>,
     registry: Res<LevelRegistry>,
     selection: Res<LevelSelection>,
-    mut reload: EventWriter<ReloadVisualsEvent>,
+    mut reload: MessageWriter<ReloadVisualsEvent>,
     audio: Res<GameAudio>,
-    save: Res<GameSave>,
+    backend: Res<SaveBackend>,
+    mut save: ResMut<GameSave>,
     window: Query<&Window, With<bevy::window::PrimaryWindow>>,
     countdown_entities: Query<Entity, With<CountdownText>>,
 ) {
@@ -76,6 +77,8 @@ pub fn load_level_system(
         session.pack_name = pack.name.clone();
         session.level_index = selection.level_index;
         session.level_label = format!("{} #{}", pack.name, level.index);
+
+        record_active_level(&backend, &mut save, &pack.name, level.index);
 
         if ev.restart {
             session.tries += 1;
@@ -101,7 +104,7 @@ pub fn load_level_system(
             countdown.timer = Timer::from_seconds(1.0, TimerMode::Once);
 
             let scale = window
-                .get_single()
+                .single()
                 .map(|w| crate::viewport::ui_scale(w))
                 .unwrap_or(1.0);
             commands.spawn((
@@ -130,7 +133,7 @@ pub fn load_level_system(
             pack.name
         );
 
-        reload.send(ReloadVisualsEvent);
+        reload.write(ReloadVisualsEvent);
     }
 }
 
@@ -168,7 +171,7 @@ pub fn tick_level_countdown(
         **text = countdown.display.to_string();
     }
 
-    if !countdown.timer.finished() {
+    if !countdown.timer.is_finished() {
         return;
     }
 
@@ -192,7 +195,7 @@ pub fn cleanup_countdown_overlay(mut commands: Commands, q: Query<Entity, With<C
 }
 
 pub fn on_core_events(
-    mut reader: EventReader<CoreGameEvent>,
+    mut reader: MessageReader<CoreGameEvent>,
     state: Res<State<AppState>>,
     mut next: ResMut<NextState<AppState>>,
     mut timer: ResMut<SpeedrunTimer>,

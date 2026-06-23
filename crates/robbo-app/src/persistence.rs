@@ -129,10 +129,13 @@ pub struct AndroidSaveStorage {
 #[cfg(target_os = "android")]
 impl AndroidSaveStorage {
     pub fn new() -> Self {
-        let base = android_files_dir().unwrap_or_else(|| PathBuf::from("/data/data/org.bevyengine.digitalrobbo/files"));
-        Self {
-            path: base.join("digitalrobbo/save.ron"),
-        }
+        let base = android_files_dir().unwrap_or_else(|| {
+            bevy::log::warn!("android_files_dir failed; using fallback internal path");
+            PathBuf::from("/data/data/org.bevyengine.digitalrobbo/files")
+        });
+        let path = base.join("digitalrobbo/save.ron");
+        bevy::log::info!("Android save path: {}", path.display());
+        Self { path }
     }
 }
 
@@ -229,9 +232,54 @@ pub fn default_save_path() -> PathBuf {
 }
 
 pub fn load_save(backend: &SaveBackend) -> SaveData {
-    backend.0.load().unwrap_or_default()
+    match backend.0.load() {
+        Some(data) => {
+            bevy::log::info!(
+                "Loaded save: pack='{}' level={}",
+                data.profile.last_pack,
+                data.profile.last_level
+            );
+            data
+        }
+        None => {
+            bevy::log::info!("No save file found; starting fresh");
+            SaveData::default()
+        }
+    }
 }
 
 pub fn persist_save(backend: &SaveBackend, save: &SaveData) {
-    let _ = backend.0.save(save);
+    if backend.0.save(save) {
+        bevy::log::debug!("Save persisted (pack='{}', level={})", save.profile.last_pack, save.profile.last_level);
+    } else {
+        bevy::log::error!("Failed to persist save");
+    }
+}
+
+/// Store the level the player is about to play (resume point on next launch).
+pub fn record_active_level(
+    backend: &SaveBackend,
+    save: &mut GameSave,
+    pack_name: &str,
+    level_index: u32,
+) {
+    save.0.profile.last_pack = pack_name.to_string();
+    save.0.profile.last_level = level_index;
+    persist_save(backend, &save.0);
+}
+
+/// Apply saved pack/level to [`LevelSelection`] after loading [`GameSave`].
+pub fn restore_session_from_save(
+    registry: Res<crate::levels::LevelRegistry>,
+    save: Res<GameSave>,
+    mut selection: ResMut<crate::levels::LevelSelection>,
+) {
+    crate::levels::resolve_last_level(&registry, &save.0.profile, &mut selection);
+    if !save.0.profile.last_pack.is_empty() {
+        bevy::log::info!(
+            "Restored progress: pack '{}' level {}",
+            save.0.profile.last_pack,
+            save.0.profile.last_level
+        );
+    }
 }

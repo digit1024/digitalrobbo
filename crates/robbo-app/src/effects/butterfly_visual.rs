@@ -96,7 +96,7 @@ pub fn update_butterfly_visuals(
         let color = Color::srgba(red, green, 0.06, alpha);
 
         for child in children.iter() {
-            glow_updates.push((*child, Quat::from_rotation_z(-spin), color, beam));
+            glow_updates.push((child, Quat::from_rotation_z(-spin), color, beam));
         }
     }
 

@@ -43,7 +43,8 @@ pub fn spawn_collect_pop(
         },
     ));
     if let Some(root) = level_root {
-        entity.set_parent(root);
+        let id = entity.id();
+        commands.entity(root).add_child(id);
     }
 }
 
@@ -63,7 +64,7 @@ pub fn tick_collect_pop_effects(
         transform.translation.y = effect.base_y + eased * tile * 0.22;
         sprite.color = sprite.color.with_alpha((1.0 - t).max(0.0));
 
-        if effect.timer.finished() {
+        if effect.timer.is_finished() {
             commands.entity(entity).despawn();
         }
     }

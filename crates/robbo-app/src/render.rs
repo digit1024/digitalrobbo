@@ -74,8 +74,8 @@ const BEAR_SCALE_AMP: f32 = 0.05;
 const BEAR_TURN_TICKS: f32 = 1.0;
 
 fn try_despawn(commands: &mut Commands, entity: Entity) {
-    if commands.get_entity(entity).is_some() {
-        commands.entity(entity).despawn_recursive();
+    if commands.get_entity(entity).is_ok() {
+        commands.entity(entity).despawn();
     }
 }
 
@@ -170,7 +170,8 @@ fn spawn_explosion_effect(
         },
     ));
     if let Some(root) = level_root {
-        entity.set_parent(root);
+        let id = entity.id();
+        commands.entity(root).add_child(id);
     }
 }
 
@@ -184,7 +185,7 @@ pub fn update_explosion_effects(
         let t = (effect.timer.elapsed_secs() / EXPLOSION_SECS).clamp(0.0, 1.0);
         transform.scale = Vec3::splat(0.15 + t * 1.35);
         sprite.color = Color::srgba(1.0, 0.55, 0.05, 0.95 * (1.0 - t));
-        if effect.timer.finished() {
+        if effect.timer.is_finished() {
             commands.entity(entity).despawn();
         }
     }
@@ -336,7 +337,7 @@ pub fn sync_visuals(
             attach_butterfly_visual(&mut commands, id, cell.col, cell.row);
         }
         if let Some(root) = level_root {
-            commands.entity(id).set_parent(root);
+            commands.entity(root).add_child(id);
         }
         entity_map.0.insert(state.id, id);
         spawned += 1;
@@ -565,7 +566,7 @@ pub fn rebuild_level_visuals(
     mut tile_map: ResMut<TileEntityMap>,
     mut magnet_beams: ResMut<MagnetBeams>,
     level_roots: Query<Entity, With<LevelRoot>>,
-    mut reload: EventReader<ReloadVisualsEvent>,
+    mut reload: MessageReader<ReloadVisualsEvent>,
     mut audit: ResMut<RenderAudit>,
 ) {
     if reload.read().next().is_none() {
@@ -726,7 +727,7 @@ fn despawn_level(
     tile_map: &mut TileEntityMap,
 ) {
     for root in level_roots.iter() {
-        commands.entity(root).despawn_recursive();
+        commands.entity(root).despawn();
     }
     // Orphan runtime spawns (projectiles etc.) may live outside LevelRoot.
     for entity in entity_map.0.values() {
@@ -838,7 +839,7 @@ pub fn update_tile_vanish_effects(
         let alpha = 1.0 - t;
         sprite.color = sprite.color.with_alpha(alpha);
 
-        if effect.timer.finished() {
+        if effect.timer.is_finished() {
             tile_sprite.tile_kind = TileKind::Empty;
             transform.scale = Vec3::ONE;
             if let Some(ref sa) = assets {
@@ -860,7 +861,7 @@ pub fn update_teleport_reveal(
 ) {
     for (entity, mut reveal, mut visibility) in &mut query {
         reveal.timer.tick(time.delta());
-        if reveal.timer.finished() {
+        if reveal.timer.is_finished() {
             *visibility = Visibility::Inherited;
             commands.entity(entity).remove::<TeleportReveal>();
         }

@@ -11,15 +11,15 @@ pub const TICK_SECS: f32 = 0.1; // 10 Hz sim — enemy delays scaled from GNU 25
 /// Visual step length — always equals one sim tick (Robbo, enemies, bullets, pushed boxes).
 pub const ANIM_SECS: f32 = TICK_SECS;
 
-#[derive(Event, Clone, Debug)]
+#[derive(Message, Clone, Debug)]
 pub struct CoreGameEvent(pub GameEvent);
 
-#[derive(Event, Clone, Debug, Default)]
+#[derive(Message, Clone, Debug, Default)]
 pub struct LoadLevelEvent {
     pub restart: bool,
 }
 
-#[derive(Event, Clone, Debug, Default)]
+#[derive(Message, Clone, Debug, Default)]
 pub struct ReloadVisualsEvent;
 
 #[derive(Resource, Default, Debug)]
@@ -49,7 +49,7 @@ pub fn audit_frame_timing(
 }
 
 pub fn audit_reload_events(
-    mut reload: EventReader<ReloadVisualsEvent>,
+    mut reload: MessageReader<ReloadVisualsEvent>,
     state: Res<State<AppState>>,
     mut audit: ResMut<RenderAudit>,
 ) {
@@ -165,7 +165,7 @@ pub fn game_tick_system(
     mut bridge: ResMut<CoreBridge>,
     mut steering: ResMut<SteeringState>,
     mut tick_timer: ResMut<GameTickTimer>,
-    mut core_events: EventWriter<CoreGameEvent>,
+    mut core_events: MessageWriter<CoreGameEvent>,
     state: Res<State<AppState>>,
     countdown: Res<LevelCountdown>,
     time: Res<Time>,
@@ -211,7 +211,7 @@ pub fn game_tick_system(
 
     for e in &events {
         bevy::log::debug!("core event: {e:?}");
-        core_events.send(CoreGameEvent(e.clone()));
+        core_events.write(CoreGameEvent(e.clone()));
     }
     bridge.events_queue = events;
 }

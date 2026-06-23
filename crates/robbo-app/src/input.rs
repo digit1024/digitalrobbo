@@ -6,7 +6,6 @@ use crate::audio::AudioGate;
 use crate::bridge::{CoreBridge, LoadLevelEvent, ReloadVisualsEvent};
 use crate::game_menus::{dismiss_game_menu, GameMenuRoot};
 use crate::levels::{LevelRegistry, LevelSelection};
-use crate::persistence::{GameSave, SaveBackend, persist_save};
 use crate::ui::LevelCountdown;
 
 /// Swallow menu keys for a few frames after entering gameplay (prevents Enter bleed).
@@ -55,14 +54,6 @@ pub fn tick_input_cooldown(mut cooldown: ResMut<InputCooldown>) {
 
 pub(crate) fn begin_playing(cooldown: &mut InputCooldown) {
     cooldown.frames_remaining = 4;
-}
-
-fn resolve_last_level(
-    registry: &LevelRegistry,
-    save: &GameSave,
-    selection: &mut LevelSelection,
-) {
-    crate::levels::resolve_last_level(registry, &save.0.profile, selection);
 }
 
 struct DirKeys {
@@ -209,11 +200,9 @@ pub fn keyboard_input(
     mut next: ResMut<NextState<AppState>>,
     mut selection: ResMut<LevelSelection>,
     registry: Res<LevelRegistry>,
-    mut load_events: EventWriter<LoadLevelEvent>,
-    mut reload: EventWriter<ReloadVisualsEvent>,
+    mut load_events: MessageWriter<LoadLevelEvent>,
+    mut reload: MessageWriter<ReloadVisualsEvent>,
     countdown: Res<LevelCountdown>,
-    mut save: ResMut<GameSave>,
-    backend: Res<SaveBackend>,
     mut gate: ResMut<AudioGate>,
     mut cooldown: ResMut<InputCooldown>,
     menu_roots: Query<Entity, With<GameMenuRoot>>,
@@ -250,14 +239,7 @@ pub fn keyboard_input(
                 }
             }
             if keys.just_pressed(KeyCode::Enter) {
-                if let Some(pack) = registry.pack_by_index(selection.pack_index) {
-                    if let Some(level) = pack.levels.get(selection.level_index) {
-                        save.0.profile.last_pack = pack.name.clone();
-                        save.0.profile.last_level = level.index;
-                        persist_save(&backend, &save.0);
-                    }
-                }
-                load_events.send(LoadLevelEvent { restart: false });
+                load_events.write(LoadLevelEvent { restart: false });
                 begin_playing(&mut cooldown);
                 next.set(AppState::Playing);
                 dismiss_game_menu(&mut commands, &menu_roots);
@@ -280,13 +262,13 @@ pub fn keyboard_input(
                 let current = bridge.world.clone();
                 if let Some(prev) = bridge.history.undo(current) {
                     bridge.world = prev;
-                    reload.send(ReloadVisualsEvent);
+                    reload.write(ReloadVisualsEvent);
                 }
             } else if keys.just_pressed(KeyCode::KeyX) {
                 let current = bridge.world.clone();
                 if let Some(next_world) = bridge.history.redo(current) {
                     bridge.world = next_world;
-                    reload.send(ReloadVisualsEvent);
+                    reload.write(ReloadVisualsEvent);
                 }
             } else if keys.just_pressed(KeyCode::Escape) {
                 next.set(AppState::Paused);
@@ -297,7 +279,7 @@ pub fn keyboard_input(
                 next.set(AppState::Playing);
                 dismiss_game_menu(&mut commands, &menu_roots);
             } else if keys.just_pressed(KeyCode::KeyR) {
-                load_events.send(LoadLevelEvent { restart: true });
+                load_events.write(LoadLevelEvent { restart: true });
                 next.set(AppState::Playing);
                 dismiss_game_menu(&mut commands, &menu_roots);
             } else if keys.just_pressed(KeyCode::KeyQ) {
@@ -310,7 +292,7 @@ pub fn keyboard_input(
                 if let Some(pack) = registry.pack_by_index(selection.pack_index) {
                     if selection.level_index + 1 < pack.levels.len() {
                         selection.level_index += 1;
-                        load_events.send(LoadLevelEvent { restart: false });
+                        load_events.write(LoadLevelEvent { restart: false });
                         begin_playing(&mut cooldown);
                         next.set(AppState::Playing);
                         dismiss_game_menu(&mut commands, &menu_roots);
@@ -326,7 +308,7 @@ pub fn keyboard_input(
         }
         AppState::GameOver => {
             if keys.just_pressed(KeyCode::KeyR) {
-                load_events.send(LoadLevelEvent { restart: true });
+                load_events.write(LoadLevelEvent { restart: true });
                 begin_playing(&mut cooldown);
                 next.set(AppState::Playing);
                 dismiss_game_menu(&mut commands, &menu_roots);

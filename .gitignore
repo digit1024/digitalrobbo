@@ -1,11 +1,26 @@
+# Rust
 /target
 **/*.rs.bk
+
+# Editor / OS
 .DS_Store
 .idea/
 .vscode/
 *.swp
+.cursor/
+
+# Web
 dist/
 .trunk/
+
+# Smoke test screenshots
+target/smoke/
+
+# Android
 mobile/android/app/build/
 mobile/android/.gradle/
 mobile/android/app/src/main/jniLibs/
+mobile/android/app/.cxx/
+mobile/android/local.properties
+*.apk
+*.aab

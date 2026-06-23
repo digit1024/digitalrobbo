@@ -72,3 +72,15 @@ Touch pads are **Android-only** (`#[cfg(target_os = "android")]`). Desktop build
 ## iOS
 
 Not yet wired. Follow Bevy iOS mobile guide when needed.
+
+## App icon
+
+Launcher icons are generated from [`assets/icon.png`](../assets/icon.png) into `mobile/android/app/src/main/res/mipmap-*`.
+
+After changing the source image:
+
+```bash
+./scripts/generate_android_icons.sh
+```
+
+Then rebuild the APK (`./scripts/build_android.sh`).

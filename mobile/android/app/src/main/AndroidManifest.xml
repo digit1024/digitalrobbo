@@ -3,9 +3,9 @@
     xmlns:tools="http://schemas.android.com/tools">
 
     <application
-        android:icon="@android:drawable/sym_def_app_icon"
+        android:icon="@mipmap/ic_launcher"
         android:label="DigitalRobbo"
-        android:roundIcon="@android:drawable/sym_def_app_icon"
+        android:roundIcon="@mipmap/ic_launcher_round"
         android:theme="@style/Theme.AppCompat.NoActionBar"
         tools:targetApi="33">
         <activity

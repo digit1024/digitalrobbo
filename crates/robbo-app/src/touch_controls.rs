@@ -294,7 +294,7 @@ fn set_quarter_overlays(
     overlays: &mut Query<(&DonutQuarterOverlay, &mut Visibility)>,
 ) {
     for child in children.iter() {
-        let Ok((overlay, mut vis)) = overlays.get_mut(*child) else {
+        let Ok((overlay, mut vis)) = overlays.get_mut(child) else {
             continue;
         };
         *vis = if active == Some(overlay.quarter) {
@@ -328,7 +328,7 @@ pub fn spawn_touch_controls(
     window: Query<&Window, With<PrimaryWindow>>,
     mut images: ResMut<Assets<Image>>,
 ) {
-    let Ok(window) = window.get_single() else {
+    let Ok(window) = window.single() else {
         return;
     };
     let PadLayout { size, margin } = compute_pad_layout(window);
@@ -365,7 +365,7 @@ pub fn spawn_touch_controls(
 }
 
 fn spawn_donut_pad(
-    parent: &mut ChildBuilder,
+    parent: &mut ChildSpawnerCommands,
     images: &mut Assets<Image>,
     size: f32,
     margin: f32,
@@ -480,10 +480,10 @@ pub fn donut_pad_touch(
         return;
     }
 
-    let Ok(window) = window.get_single() else {
+    let Ok(window) = window.single() else {
         return;
     };
-    let Ok(camera) = camera.get_single() else {
+    let Ok(camera) = camera.single() else {
         return;
     };
 
@@ -534,6 +534,6 @@ pub fn donut_pad_touch(
 
 pub fn cleanup_touch_controls(mut commands: Commands, q: Query<Entity, With<TouchControlsRoot>>) {
     for entity in &q {
-        commands.entity(entity).despawn_recursive();
+        commands.entity(entity).despawn();
     }
 }

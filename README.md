@@ -1,12 +1,28 @@
 # DigitalRobbo
 
-Modern GNU Robbo remake in Rust + Bevy.
+<p align="center">
+  <img src="assets/icon.png" alt="DigitalRobbo app icon" width="128" height="128">
+</p>
+
+A small remake of the classic puzzle game **Robbo**, written in Rust with [Bevy](https://bevyengine.org/). It is not meant to replace anything — just a personal attempt to bring those levels to more screens, with touch controls on Android and a browser build for WASM.
+
+**[Watch a short gameplay video →](https://youtu.be/SSQ8WgN_zac)**
+
+## Standing on open source
+
+Robbo was created by **Janusz Pelc** for the Atari platform. Years later, the **[GNU Robbo](https://gnurobbo.sourceforge.net/)** project kept the game alive: open levels, open logic, and a community that still cares. DigitalRobbo would not exist without that work.
+
+This project tries to honour that spirit. The simulation references GNU Robbo behaviour; level packs use the same `.dat` format. If you enjoy DigitalRobbo, please also look at GNU Robbo and the original game — they are the real foundation.
+
+That is what open source makes possible: one person builds on another's work, and something old can find new players. I am grateful to Janusz Pelc for Robbo, and to everyone who contributed to GNU Robbo over the years.
 
 ## Crates
 
-- `robbo-core` — deterministic simulation (no Bevy)
-- `robbo-formats` — gnurobbo `.dat` level parser
-- `robbo-app` — Bevy front-end
+| Crate | Role |
+|-------|------|
+| `robbo-core` | Deterministic simulation (no Bevy) |
+| `robbo-formats` | GNU Robbo `.dat` level parser |
+| `robbo-app` | Bevy front-end (desktop, WASM, Android) |
 
 ## Build
 
@@ -14,6 +30,19 @@ Modern GNU Robbo remake in Rust + Bevy.
 unset ARGV0 && cargo check --workspace
 unset ARGV0 && cargo run -p robbo-app
 ```
+
+## Controls
+
+| Input | Action |
+|-------|--------|
+| Arrow keys / WASD | Move |
+| Space | Shoot |
+| Z | Undo |
+| Esc | Pause / back |
+| Enter | Confirm menu |
+| F9 | Toggle editor stub |
+
+On Android, on-screen pads replace keyboard input (move on the left, turn and shoot on the right).
 
 ## Automated game smoke test
 
@@ -47,21 +76,25 @@ chmod +x scripts/build_android.sh scripts/verify_assets.sh
 adb install -r mobile/android/app/build/outputs/apk/debug/app-debug.apk
 ```
 
-See [docs/mobile.md](docs/mobile.md) for details. Touch pads (move left, shoot right) appear only on Android.
+See [docs/mobile.md](docs/mobile.md) for install notes, touch controls, and troubleshooting.
+
+### App icon
+
+The launcher icon comes from [`assets/icon.png`](assets/icon.png) (1024×1024 source). After changing it, regenerate Android mipmaps:
+
+```bash
+./scripts/generate_android_icons.sh
+./scripts/build_android.sh
+```
 
 ## Mobile (iOS)
 
-Use Bevy's iOS templates. See `docs/mobile.md`.
+Not wired yet. See [docs/mobile.md](docs/mobile.md) when the time comes.
 
 ## Docs
 
 Architecture design: [docs/architecture-design/README.md](docs/architecture-design/README.md)
 
-## Controls
+## License
 
-- Arrow keys / WASD — move
-- Space — shoot
-- Z — undo
-- Esc — pause / back
-- Enter — confirm menu
-- F9 — toggle editor stub (stretch)
+GPL-3.0-or-later — same family as GNU Robbo.

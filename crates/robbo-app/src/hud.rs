@@ -47,10 +47,10 @@ pub fn spawn_level_hud(
     if !existing.is_empty() {
         bevy::log::warn!("spawn_level_hud: clearing stale HUD before respawn");
         for entity in existing.iter().collect::<Vec<_>>() {
-            commands.entity(entity).despawn_recursive();
+            commands.entity(entity).despawn();
         }
     }
-    let Ok(window) = window.get_single() else {
+    let Ok(window) = window.single() else {
         return;
     };
     let scale = viewport::ui_scale(window);
@@ -166,7 +166,7 @@ pub fn spawn_level_hud(
 }
 
 fn spawn_stat<M: Component>(
-    parent: &mut ChildBuilder,
+    parent: &mut ChildSpawnerCommands,
     asset_server: &AssetServer,
     font: &GameFont,
     icon_px: f32,
@@ -187,7 +187,7 @@ fn spawn_stat<M: Component>(
         .with_children(|row| {
             row.spawn((
                 ImageNode {
-                    image: asset_server.load(icon_path),
+                    image: asset_server.load(icon_path.to_string()),
                     ..default()
                 },
                 Node {
@@ -210,7 +210,7 @@ fn spawn_stat<M: Component>(
 }
 
 fn spawn_hud_button(
-    parent: &mut ChildBuilder,
+    parent: &mut ChildSpawnerCommands,
     asset_server: &AssetServer,
     size: f32,
     icon_path: &str,
@@ -232,7 +232,7 @@ fn spawn_hud_button(
         .with_children(|btn| {
             btn.spawn((
                 ImageNode {
-                    image: asset_server.load(icon_path),
+                    image: asset_server.load(icon_path.to_string()),
                     ..default()
                 },
                 Node {
@@ -246,7 +246,7 @@ fn spawn_hud_button(
 
 #[cfg(target_os = "android")]
 fn spawn_zoom_button(
-    parent: &mut ChildBuilder,
+    parent: &mut ChildSpawnerCommands,
     asset_server: &AssetServer,
     size: f32,
     icon_path: &str,
@@ -268,7 +268,7 @@ fn spawn_zoom_button(
         .with_children(|btn| {
             btn.spawn((
                 ImageNode {
-                    image: asset_server.load(icon_path),
+                    image: asset_server.load(icon_path.to_string()),
                     ..default()
                 },
                 Node {
@@ -318,7 +318,7 @@ pub fn hud_button_input(
     state: Res<State<AppState>>,
     mut interactions: Query<(&Interaction, &HudButton), Changed<Interaction>>,
     mut next: ResMut<NextState<AppState>>,
-    mut load_events: EventWriter<LoadLevelEvent>,
+    mut load_events: MessageWriter<LoadLevelEvent>,
     mut cooldown: ResMut<InputCooldown>,
 ) {
     if *state.get() != AppState::Playing {
@@ -331,7 +331,7 @@ pub fn hud_button_input(
         match button {
             HudButton::PauseMenu => next.set(AppState::Paused),
             HudButton::Restart => {
-                load_events.send(LoadLevelEvent { restart: true });
+                load_events.write(LoadLevelEvent { restart: true });
                 cooldown.frames_remaining = 0;
             }
         }
@@ -340,6 +340,6 @@ pub fn hud_button_input(
 
 pub fn cleanup_level_hud(mut commands: Commands, q: Query<Entity, With<HudRoot>>) {
     for entity in q.iter().collect::<Vec<_>>() {
-        commands.entity(entity).despawn_recursive();
+        commands.entity(entity).despawn();
     }
 }

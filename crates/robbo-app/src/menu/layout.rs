@@ -46,7 +46,7 @@ pub fn track_main_menu_layout(
     if *state.get() != crate::app_state::AppState::MainMenu {
         return;
     }
-    let Ok(window) = window.get_single() else {
+    let Ok(window) = window.single() else {
         return;
     };
     let next = MainMenuLayout::from_window(window);

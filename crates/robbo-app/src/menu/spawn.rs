@@ -108,7 +108,7 @@ pub fn spawn_ui(
         });
 }
 
-fn spawn_root(parent: &mut ChildBuilder, font: &GameFont, item_size: f32) {
+fn spawn_root(parent: &mut ChildSpawnerCommands, font: &GameFont, item_size: f32) {
     spawn_item_button(parent, font, item_size, 0, "START", MainMenuAction::Start);
     spawn_item_button(
         parent,
@@ -129,7 +129,7 @@ fn spawn_root(parent: &mut ChildBuilder, font: &GameFont, item_size: f32) {
 }
 
 fn spawn_settings(
-    parent: &mut ChildBuilder,
+    parent: &mut ChildSpawnerCommands,
     font: &GameFont,
     item_size: f32,
     hint_size: f32,
@@ -174,7 +174,7 @@ fn spawn_settings(
     );
 }
 
-fn spawn_level_select(parent: &mut ChildBuilder, font: &GameFont, item_size: f32, hint_size: f32) {
+fn spawn_level_select(parent: &mut ChildSpawnerCommands, font: &GameFont, item_size: f32, hint_size: f32) {
     parent
         .spawn((
             Node {
@@ -247,7 +247,7 @@ fn spawn_level_select(parent: &mut ChildBuilder, font: &GameFont, item_size: f32
 }
 
 fn spawn_item_button(
-    parent: &mut ChildBuilder,
+    parent: &mut ChildSpawnerCommands,
     font: &GameFont,
     font_size: f32,
     index: usize,
@@ -279,7 +279,7 @@ fn spawn_item_button(
 }
 
 fn spawn_inline_button(
-    parent: &mut ChildBuilder,
+    parent: &mut ChildSpawnerCommands,
     font: &GameFont,
     font_size: f32,
     label: &str,
@@ -308,7 +308,7 @@ fn spawn_inline_button(
         });
 }
 
-fn spawn_label(parent: &mut ChildBuilder, font: &GameFont, font_size: f32, text: &str) {
+fn spawn_label(parent: &mut ChildSpawnerCommands, font: &GameFont, font_size: f32, text: &str) {
     parent.spawn((
         Text::new(text),
         TextFont {
@@ -320,7 +320,7 @@ fn spawn_label(parent: &mut ChildBuilder, font: &GameFont, font_size: f32, text:
     ));
 }
 
-fn spawn_hint(parent: &mut ChildBuilder, font: &GameFont, font_size: f32, text: &str) {
+fn spawn_hint(parent: &mut ChildSpawnerCommands, font: &GameFont, font_size: f32, text: &str) {
     parent.spawn((
         Text::new(text),
         TextFont {
@@ -345,7 +345,7 @@ pub fn rebuild_ui(
     roots: &Query<Entity, With<MainMenuUiRoot>>,
 ) {
     for entity in roots.iter().collect::<Vec<_>>() {
-        commands.entity(entity).despawn_recursive();
+        commands.entity(entity).despawn();
     }
     spawn_ui(commands, font, save, window, screen);
 }

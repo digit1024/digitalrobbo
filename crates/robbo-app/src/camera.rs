@@ -80,7 +80,7 @@ pub fn load_camera_config(mut commands: Commands) {
 }
 
 pub fn reset_camera_on_level_load(
-    mut load_events: EventReader<LoadLevelEvent>,
+    mut load_events: MessageReader<LoadLevelEvent>,
     mut state: ResMut<CameraState>,
 ) {
     if load_events.read().next().is_some() {
@@ -183,7 +183,7 @@ pub fn update_camera(
         return;
     }
 
-    let Ok(window) = window.get_single() else {
+    let Ok(window) = window.single() else {
         return;
     };
 
@@ -235,7 +235,7 @@ pub fn update_camera(
     );
 
     let mut camera_q = transforms.p1();
-    let Ok(mut transform) = camera_q.get_single_mut() else {
+    let Ok(mut transform) = camera_q.single_mut() else {
         return;
     };
     transform.translation.x = clamped.x;

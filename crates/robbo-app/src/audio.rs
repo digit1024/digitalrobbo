@@ -220,7 +220,7 @@ fn start_bgm(
     let entity = commands
         .spawn((
             AudioPlayer::new(handle),
-            PlaybackSettings::LOOP.with_volume(Volume::new(volume.clamp(0.0, 1.0))),
+            PlaybackSettings::LOOP.with_volume(Volume::Linear(volume.clamp(0.0, 1.0))),
         ))
         .id();
     bgm.track_path = Some(path.to_string());
@@ -303,7 +303,7 @@ pub fn play_menu_bgm_now(
 }
 
 pub fn queue_level_bgm_on_load(
-    mut events: EventReader<LoadLevelEvent>,
+    mut events: MessageReader<LoadLevelEvent>,
     registry: Res<LevelRegistry>,
     selection: Res<LevelSelection>,
     manifest: Res<AudioManifest>,
@@ -402,7 +402,7 @@ fn play_music_stinger(
     };
     commands.spawn((
         AudioPlayer::new(handle.clone()),
-        PlaybackSettings::DESPAWN.with_volume(Volume::new(vol.clamp(0.0, 1.0))),
+        PlaybackSettings::DESPAWN.with_volume(Volume::Linear(vol.clamp(0.0, 1.0))),
     ));
 }
 
@@ -431,13 +431,13 @@ pub fn play_sfx(
     };
     commands.spawn((
         AudioPlayer::new(handle.clone()),
-        PlaybackSettings::DESPAWN.with_volume(Volume::new(vol.clamp(0.0, 1.0))),
+        PlaybackSettings::DESPAWN.with_volume(Volume::Linear(vol.clamp(0.0, 1.0))),
     ));
 }
 
 pub fn sfx_on_core_events(
     mut commands: Commands,
-    mut reader: EventReader<CoreGameEvent>,
+    mut reader: MessageReader<CoreGameEvent>,
     bridge: Res<CoreBridge>,
     audio: Res<GameAudio>,
     save: Res<GameSave>,
@@ -448,7 +448,7 @@ pub fn sfx_on_core_events(
             play_music_stinger(&mut commands, &audio, &save, "level_complete");
             continue;
         }
-        let mapped = match event {
+        let mapped = match &event {
             GameEvent::Moved { entity_id, to, .. } if *entity_id == bridge.world.robbo_id => {
                 Some(("walk", Some(*to)))
             }
@@ -509,14 +509,14 @@ pub fn music_volume_percent(save: &GameSave) -> u8 {
 }
 
 /// Apply saved music level to the currently playing BGM entity, if any.
-pub fn apply_live_music_volume(save: &GameSave, bgm: &BgmState, sinks: &Query<&AudioSink>) {
+pub fn apply_live_music_volume(save: &GameSave, bgm: &BgmState, sinks: &mut Query<&mut AudioSink>) {
     let Some(entity) = bgm.entity else {
         return;
     };
-    let Ok(sink) = sinks.get(entity) else {
+    let Ok(mut sink) = sinks.get_mut(entity) else {
         return;
     };
-    sink.set_volume(effective_music_volume(save));
+    sink.set_volume(Volume::Linear(effective_music_volume(save)));
 }
 
 pub fn play_countdown_tick(
@@ -531,14 +531,14 @@ pub fn play_countdown_tick(
 pub(crate) fn update_enemy_ambient_sounds(
     mut commands: Commands,
     mut pool: ResMut<EnemyAmbientSounds>,
-    mut load_events: EventReader<LoadLevelEvent>,
+    mut load_events: MessageReader<LoadLevelEvent>,
     bridge: Res<CoreBridge>,
     audio: Res<GameAudio>,
     save: Res<GameSave>,
     gate: Res<AudioGate>,
     state: Res<State<AppState>>,
     countdown: Res<LevelCountdown>,
-    sinks: Query<(&EnemyAmbientSound, &AudioSink)>,
+    mut sinks: Query<(&EnemyAmbientSound, &mut AudioSink)>,
 ) {
     for _ in load_events.read() {
         clear_enemy_ambient_sounds(&mut commands, &mut pool);
@@ -576,7 +576,7 @@ pub(crate) fn update_enemy_ambient_sounds(
         let entity = commands
             .spawn((
                 AudioPlayer::new(handle.clone()),
-                PlaybackSettings::LOOP.with_volume(Volume::new(vol)),
+                PlaybackSettings::LOOP.with_volume(Volume::Linear(vol)),
                 EnemyAmbientSound {
                     element_id: el.id,
                 },
@@ -594,7 +594,7 @@ pub(crate) fn update_enemy_ambient_sounds(
         }
     });
 
-    for (marker, sink) in &sinks {
+    for (marker, mut sink) in &mut sinks {
         let Some((cell, _)) = bridge
             .world
             .elements
@@ -605,7 +605,7 @@ pub(crate) fn update_enemy_ambient_sounds(
             continue;
         };
         let vol = spatial_sfx_volume(&save, cell, listener).unwrap_or(0.0);
-        sink.set_volume(vol);
+        sink.set_volume(Volume::Linear(vol));
     }
 }
 

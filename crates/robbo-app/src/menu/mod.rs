@@ -47,7 +47,7 @@ pub fn spawn_main_menu(
     window: Query<&Window, With<PrimaryWindow>>,
 ) {
     despawn_all(&mut commands, &existing);
-    let Ok(window) = window.get_single() else {
+    let Ok(window) = window.single() else {
         return;
     };
     init_on_enter(
@@ -71,7 +71,7 @@ pub fn cleanup_main_menu(
 
 fn despawn_all(commands: &mut Commands, owned: &Query<Entity, With<MainMenuOwned>>) {
     for entity in owned.iter().collect::<Vec<_>>() {
-        commands.entity(entity).despawn_recursive();
+        commands.entity(entity).despawn();
     }
 }
 
