@@ -317,6 +317,12 @@ fn compute_pad_layout(window: &Window) -> PadLayout {
     PadLayout { size, margin }
 }
 
+/// Bottom inset reserved by touch pads (pad height + margin).
+pub(crate) fn bottom_chrome_height(window: &Window) -> f32 {
+    let PadLayout { size, margin } = compute_pad_layout(window);
+    size + margin
+}
+
 pub fn spawn_touch_controls(
     mut commands: Commands,
     window: Query<&Window, With<PrimaryWindow>>,

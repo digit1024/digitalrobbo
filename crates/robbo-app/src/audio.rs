@@ -479,7 +479,7 @@ pub fn sfx_on_core_events(
 pub fn toggle_mute(backend: &SaveBackend, save: &mut GameSave) {
     let s = &mut save.0.settings;
     if s.music_volume < 0.001 && s.sfx_volume < 0.001 {
-        s.music_volume = s.stored_music_volume.max(0.5);
+        s.music_volume = s.stored_music_volume.max(0.2);
         s.sfx_volume = s.stored_sfx_volume.max(1.0);
     } else {
         s.stored_music_volume = s.music_volume;

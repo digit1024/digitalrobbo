@@ -155,7 +155,10 @@ pub fn handle_zoom_buttons(
     }
 }
 
-fn apply_zoom(state: &mut CameraState, config: &CameraConfig, delta: i32) {
+/// Default visible cells along the play-area width on mobile.
+pub(crate) const MOBILE_DEFAULT_VISIBLE_CELLS: u32 = 16;
+
+pub(crate) fn apply_zoom(state: &mut CameraState, config: &CameraConfig, delta: i32) {
     let cfg = &config.0;
     let min_level = -(cfg.max_zoom_out as i32);
     let max_level = cfg.max_zoom_in as i32;
@@ -209,12 +212,14 @@ pub fn update_camera(
         .smoothed_zoom_level
         .lerp(target_zoom, zoom_alpha);
 
+    let (tiles_w, tiles_h, view_w, view_h) = viewport_for_platform(&cfg, window);
+
     let base_scale = base_scale_for_viewport(
-        cfg.viewport_tiles.width,
-        cfg.viewport_tiles.height,
+        tiles_w,
+        tiles_h,
         tile,
-        window.width(),
-        window.height(),
+        view_w,
+        view_h,
         cfg.margin,
     );
     let zoom_factor = cfg.zoom_step.powf(cam_state.smoothed_zoom_level);
@@ -256,6 +261,37 @@ fn level_center(bridge: &CoreBridge, tile: f32) -> Vec2 {
     let w = bridge.world.width as f32;
     let h = bridge.world.height as f32;
     Vec2::new(w * tile * 0.5, -h * tile * 0.5)
+}
+
+fn viewport_for_platform(cfg: &CameraConfigData, window: &Window) -> (u32, u32, f32, f32) {
+    #[cfg(target_os = "android")]
+    {
+        let top = crate::hud::hud_bar_height(window);
+        let bottom = crate::touch_controls::bottom_chrome_height(window);
+        let view_w = window.width();
+        let view_h = (window.height() - top - bottom).max(1.0);
+        let (tiles_w, tiles_h) =
+            viewport_tiles_for_width(MOBILE_DEFAULT_VISIBLE_CELLS, view_w, view_h);
+        (tiles_w, tiles_h, view_w, view_h)
+    }
+    #[cfg(not(target_os = "android"))]
+    {
+        (
+            cfg.viewport_tiles.width,
+            cfg.viewport_tiles.height,
+            window.width(),
+            window.height(),
+        )
+    }
+}
+
+/// Fit `cells_wide` tiles on the width; span height proportionally.
+fn viewport_tiles_for_width(cells_wide: u32, view_w: f32, view_h: f32) -> (u32, u32) {
+    let tiles_w = cells_wide;
+    let tiles_h = (cells_wide as f32 * (view_h / view_w.max(1.0)))
+        .round()
+        .max(1.0) as u32;
+    (tiles_w, tiles_h)
 }
 
 fn base_scale_for_viewport(

@@ -9,6 +9,16 @@ use crate::input::InputCooldown;
 use crate::persistence::GameFont;
 use crate::viewport;
 
+#[cfg(target_os = "android")]
+use crate::camera::{ZoomButton, ZoomDirection};
+
+/// In-level HUD bar height in screen pixels.
+pub(crate) fn hud_bar_height(window: &Window) -> f32 {
+    HUD_BAR_HEIGHT_DESIGN * viewport::ui_scale(window)
+}
+
+const HUD_BAR_HEIGHT_DESIGN: f32 = 56.0;
+
 #[derive(Component)]
 pub struct HudRoot;
 
@@ -44,7 +54,7 @@ pub fn spawn_level_hud(
         return;
     };
     let scale = viewport::ui_scale(window);
-    let bar_h = 56.0 * scale;
+    let bar_h = HUD_BAR_HEIGHT_DESIGN * scale;
     let icon = 36.0 * scale;
     let font_size = 26.0 * scale;
     let btn = 52.0 * scale;
@@ -120,6 +130,23 @@ pub fn spawn_level_hud(
                 },
             ))
             .with_children(|buttons| {
+                #[cfg(target_os = "android")]
+                {
+                    spawn_zoom_button(
+                        buttons,
+                        &asset_server,
+                        btn,
+                        "ui/zoom-in.png",
+                        ZoomDirection::In,
+                    );
+                    spawn_zoom_button(
+                        buttons,
+                        &asset_server,
+                        btn,
+                        "ui/zoom-out.png",
+                        ZoomDirection::Out,
+                    );
+                }
                 spawn_hud_button(
                     buttons,
                     &asset_server,
@@ -201,6 +228,42 @@ fn spawn_hud_button(
             },
             BackgroundColor(Color::NONE),
             action,
+        ))
+        .with_children(|btn| {
+            btn.spawn((
+                ImageNode {
+                    image: asset_server.load(icon_path),
+                    ..default()
+                },
+                Node {
+                    width: Val::Px(size * 0.92),
+                    height: Val::Px(size * 0.92),
+                    ..default()
+                },
+            ));
+        });
+}
+
+#[cfg(target_os = "android")]
+fn spawn_zoom_button(
+    parent: &mut ChildBuilder,
+    asset_server: &AssetServer,
+    size: f32,
+    icon_path: &str,
+    direction: ZoomDirection,
+) {
+    parent
+        .spawn((
+            Button,
+            Node {
+                width: Val::Px(size),
+                height: Val::Px(size),
+                justify_content: JustifyContent::Center,
+                align_items: AlignItems::Center,
+                ..default()
+            },
+            BackgroundColor(Color::NONE),
+            ZoomButton(direction),
         ))
         .with_children(|btn| {
             btn.spawn((

@@ -48,7 +48,7 @@ pub struct SettingsData {
 }
 
 fn default_stored_music() -> f32 {
-    0.5
+    0.2
 }
 
 fn default_stored_sfx() -> f32 {
@@ -59,9 +59,9 @@ impl Default for SettingsData {
     fn default() -> Self {
         Self {
             master_volume: 0.8,
-            music_volume: 0.5,
+            music_volume: 0.2,
             sfx_volume: 1.0,
-            stored_music_volume: 0.5,
+            stored_music_volume: 0.2,
             stored_sfx_volume: 1.0,
             colourblind_mode: false,
             show_grid: false,
