@@ -29,6 +29,17 @@ jobs:
       - name: wasm build
         run: unset ARGV0 && RUSTFLAGS="" cargo build -p robbo-app --target wasm32-unknown-unknown --release
 
+  android:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android
+      - name: android compile check
+        run: unset ARGV0 && cargo check -p robbo-app --target aarch64-linux-android
+
   game-smoke:
     runs-on: ubuntu-latest
     steps:

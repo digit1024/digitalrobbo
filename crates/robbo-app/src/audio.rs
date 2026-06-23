@@ -8,7 +8,7 @@ use serde::Deserialize;
 use crate::app_state::AppState;
 use crate::bridge::{CoreBridge, CoreGameEvent, LoadLevelEvent};
 use crate::levels::{LevelRegistry, LevelSelection};
-use crate::persistence::{GameSave, persist_save};
+use crate::persistence::{GameSave, SaveBackend, persist_save};
 use crate::ui::LevelCountdown;
 
 const MANIFEST_STR: &str = include_str!("../../../assets/audio/manifest.ron");
@@ -147,10 +147,10 @@ pub fn load_audio_manifest(
         sfx,
     });
     commands.insert_resource(BgmState::default());
-    #[cfg(not(target_arch = "wasm32"))]
-    commands.insert_resource(AudioGate { unlocked: true });
-    #[cfg(target_arch = "wasm32")]
+    #[cfg(any(target_arch = "wasm32", target_os = "android"))]
     commands.insert_resource(AudioGate::default());
+    #[cfg(not(any(target_arch = "wasm32", target_os = "android")))]
+    commands.insert_resource(AudioGate { unlocked: true });
     commands.insert_resource(PendingLevelBgm::default());
     commands.insert_resource(EnemyAmbientSounds::default());
 }
@@ -158,12 +158,18 @@ pub fn load_audio_manifest(
 pub fn unlock_audio_on_input(
     keys: Res<ButtonInput<KeyCode>>,
     mouse: Res<ButtonInput<MouseButton>>,
+    #[cfg(target_os = "android")] touches: Res<Touches>,
     mut gate: ResMut<AudioGate>,
 ) {
     if gate.unlocked {
         return;
     }
     if keys.get_just_pressed().next().is_some() || mouse.get_just_pressed().next().is_some() {
+        gate.unlocked = true;
+        return;
+    }
+    #[cfg(target_os = "android")]
+    if touches.iter_just_pressed().next().is_some() {
         gate.unlocked = true;
     }
 }
@@ -470,7 +476,7 @@ pub fn sfx_on_core_events(
     }
 }
 
-pub fn toggle_mute(save: &mut GameSave) {
+pub fn toggle_mute(backend: &SaveBackend, save: &mut GameSave) {
     let s = &mut save.0.settings;
     if s.music_volume < 0.001 && s.sfx_volume < 0.001 {
         s.music_volume = s.stored_music_volume.max(0.5);
@@ -481,7 +487,7 @@ pub fn toggle_mute(save: &mut GameSave) {
         s.music_volume = 0.0;
         s.sfx_volume = 0.0;
     }
-    persist_save(&save.0);
+    persist_save(backend, &save.0);
 }
 
 pub fn is_muted(save: &GameSave) -> bool {
@@ -490,12 +496,12 @@ pub fn is_muted(save: &GameSave) -> bool {
 
 pub const MUSIC_VOLUME_STEP: f32 = 0.1;
 
-pub fn adjust_music_volume(save: &mut GameSave, delta: f32) {
+pub fn adjust_music_volume(backend: &SaveBackend, save: &mut GameSave, delta: f32) {
     let s = &mut save.0.settings;
     let new = (s.music_volume + delta).clamp(0.0, 1.0);
     s.music_volume = new;
     s.stored_music_volume = new;
-    persist_save(&save.0);
+    persist_save(backend, &save.0);
 }
 
 pub fn music_volume_percent(save: &GameSave) -> u8 {

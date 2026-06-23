@@ -36,9 +36,22 @@ rustup target add wasm32-unknown-unknown
 RUSTFLAGS="" trunk serve crates/robbo-app/index.html
 ```
 
-## Mobile
+## Android
 
-Use Bevy's Android/iOS templates. See `docs/architecture-design/adr/0004-all-three-platforms.md`.
+Requires Android SDK + NDK (API 31+), `cargo-ndk`, and `ANDROID_SDK_ROOT` set.
+
+```bash
+chmod +x scripts/build_android.sh scripts/verify_assets.sh
+./scripts/verify_assets.sh
+./scripts/build_android.sh
+adb install -r mobile/android/app/build/outputs/apk/debug/app-debug.apk
+```
+
+See [docs/mobile.md](docs/mobile.md) for details. Touch pads (move left, shoot right) appear only on Android.
+
+## Mobile (iOS)
+
+Use Bevy's iOS templates. See `docs/mobile.md`.
 
 ## Docs
 

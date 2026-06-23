@@ -3680,6 +3680,8 @@ version = "0.1.0"
 dependencies = [
  "bevy",
  "getrandom 0.3.4",
+ "jni 0.21.1",
+ "ndk-context",
  "robbo-core",
  "robbo-formats",
  "ron",

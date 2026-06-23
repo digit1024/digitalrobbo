@@ -9,6 +9,5 @@ port = 8080
 ignore = ["dist"]
 
 [[copy]]
-source = "assets/levels"
-destination = "levels"
-
+source = "assets"
+destination = "assets"

@@ -1,6 +1,7 @@
 use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
+use std::sync::Arc;
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct SaveData {
@@ -120,6 +121,86 @@ impl SaveStorage for WebSaveStorage {
     }
 }
 
+#[cfg(target_os = "android")]
+pub struct AndroidSaveStorage {
+    path: PathBuf,
+}
+
+#[cfg(target_os = "android")]
+impl AndroidSaveStorage {
+    pub fn new() -> Self {
+        let base = android_files_dir().unwrap_or_else(|| PathBuf::from("/data/data/org.bevyengine.digitalrobbo/files"));
+        Self {
+            path: base.join("digitalrobbo/save.ron"),
+        }
+    }
+}
+
+#[cfg(target_os = "android")]
+impl SaveStorage for AndroidSaveStorage {
+    fn load(&self) -> Option<SaveData> {
+        let s = std::fs::read_to_string(&self.path).ok()?;
+        ron::from_str(&s).ok()
+    }
+
+    fn save(&self, data: &SaveData) -> bool {
+        if let Some(parent) = self.path.parent() {
+            let _ = std::fs::create_dir_all(parent);
+        }
+        let Some(s) = ron::ser::to_string_pretty(data, Default::default()).ok() else {
+            return false;
+        };
+        std::fs::write(&self.path, s).is_ok()
+    }
+}
+
+#[cfg(target_os = "android")]
+fn android_files_dir() -> Option<PathBuf> {
+    use jni::objects::JString;
+    use jni::JavaVM;
+    use ndk_context::android_context;
+
+    let ctx = android_context();
+    let vm = unsafe { JavaVM::from_raw(ctx.vm().cast()) }.ok()?;
+    let mut env = vm.attach_current_thread().ok()?;
+    let context = unsafe { jni::objects::JObject::from_raw(ctx.context().cast()) };
+    let files_dir = env
+        .call_method(context, "getFilesDir", "()Ljava/io/File;", &[])
+        .ok()?
+        .l()
+        .ok()?;
+    let path_obj = env
+        .call_method(files_dir, "getAbsolutePath", "()Ljava/lang/String;", &[])
+        .ok()?
+        .l()
+        .ok()?;
+    let path_jstr = JString::from(path_obj);
+    let path: String = env.get_string(&path_jstr).ok()?.into();
+    Some(PathBuf::from(path))
+}
+
+#[derive(Resource, Clone)]
+pub struct SaveBackend(pub Arc<dyn SaveStorage>);
+
+impl SaveBackend {
+    pub fn platform_default() -> Self {
+        #[cfg(target_arch = "wasm32")]
+        {
+            return Self(Arc::new(WebSaveStorage));
+        }
+        #[cfg(all(target_os = "android", not(target_arch = "wasm32")))]
+        {
+            return Self(Arc::new(AndroidSaveStorage::new()));
+        }
+        #[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
+        {
+            Self(Arc::new(FileSaveStorage {
+                path: default_save_path(),
+            }))
+        }
+    }
+}
+
 #[derive(Resource)]
 pub struct GameFont(pub Handle<Font>);
 
@@ -147,32 +228,10 @@ pub fn default_save_path() -> PathBuf {
         .unwrap_or_else(|_| PathBuf::from(".digitalrobbo/save.ron"))
 }
 
-pub fn load_save() -> SaveData {
-    #[cfg(target_arch = "wasm32")]
-    {
-        let storage = WebSaveStorage;
-        return storage.load().unwrap_or_default();
-    }
-    #[cfg(not(target_arch = "wasm32"))]
-    {
-        let storage = FileSaveStorage {
-            path: default_save_path(),
-        };
-        storage.load().unwrap_or_default()
-    }
+pub fn load_save(backend: &SaveBackend) -> SaveData {
+    backend.0.load().unwrap_or_default()
 }
 
-pub fn persist_save(save: &SaveData) {
-    #[cfg(target_arch = "wasm32")]
-    {
-        let storage = WebSaveStorage;
-        let _ = storage.save(save);
-    }
-    #[cfg(not(target_arch = "wasm32"))]
-    {
-        let storage = FileSaveStorage {
-            path: default_save_path(),
-        };
-        let _ = storage.save(save);
-    }
+pub fn persist_save(backend: &SaveBackend, save: &SaveData) {
+    let _ = backend.0.save(save);
 }

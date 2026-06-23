@@ -9,6 +9,7 @@ authors.workspace = true
 [lib]
 name = "robbo_app"
 path = "src/lib.rs"
+crate-type = ["rlib", "cdylib", "staticlib"]
 
 [build-dependencies]
 
@@ -22,6 +23,10 @@ robbo-core = { path = "../robbo-core" }
 robbo-formats = { path = "../robbo-formats" }
 serde = { workspace = true }
 ron = { workspace = true }
+
+[target.'cfg(target_os = "android")'.dependencies]
+jni = "0.21"
+ndk-context = "0.1"
 
 [target.wasm32-unknown-unknown.dependencies]
 getrandom = { version = "0.3", features = ["wasm_js"] }

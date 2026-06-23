@@ -18,6 +18,8 @@ mod persistence;
 mod pool;
 mod projection;
 mod render;
+#[cfg(target_os = "android")]
+mod touch_controls;
 mod ui;
 mod ui_anim;
 mod viewport;
@@ -35,6 +37,8 @@ use audio::{
 use bevy::log::LogPlugin;
 use bevy::prelude::*;
 use bevy::winit::{WakeUp, WinitPlugin};
+#[cfg(target_os = "android")]
+use bevy::winit::WinitSettings;
 use bridge::{CoreBridge, EntityMap, GameSession, GameTickTimer, LoadLevelEvent, ReloadVisualsEvent, TileEntityMap};
 use effects::{
     fx_on_core_events, reset_magnet_beams_on_reload, sync_fx_auras, tick_collect_pop_effects,
@@ -54,7 +58,7 @@ use menu::{
     track_main_menu_layout, update_highlight,
     update_level_select_labels_system, update_settings_labels, MainMenuState, MainMenuUiDirty,
 };
-use persistence::{load_game_font, GameSave, load_save};
+use persistence::{load_game_font, GameSave, SaveBackend, load_save};
 use projection::ActiveProjection;
 use ui::{LevelCountdown, SpeedrunTimer};
 
@@ -72,14 +76,39 @@ pub fn build_test_app() -> App {
     app
 }
 
+/// Mobile entry point (`android_main` / iOS); desktop uses `src/main.rs`.
+#[cfg(any(target_os = "android", target_os = "ios"))]
+#[bevy_main]
+fn main() {
+    build_app().run();
+}
+
+fn asset_root() -> String {
+    #[cfg(target_os = "android")]
+    {
+        return String::new();
+    }
+    #[cfg(all(target_arch = "wasm32", not(target_os = "android")))]
+    {
+        return concat!(env!("CARGO_MANIFEST_DIR"), "/../../assets").to_string();
+    }
+    #[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
+    {
+        concat!(env!("CARGO_MANIFEST_DIR"), "/../../assets").to_string()
+    }
+}
+
 fn configure_app(app: &mut App, allow_any_thread: bool) {
+    let save_backend = SaveBackend::platform_default();
+    let game_save = GameSave(load_save(&save_backend));
+
     let mut plugins = DefaultPlugins
         .set(LogPlugin {
             filter: "robbo=info,bevy_render=warn,wgpu=warn".into(),
             ..default()
         })
         .set(AssetPlugin {
-            file_path: concat!(env!("CARGO_MANIFEST_DIR"), "/../../assets").to_string(),
+            file_path: asset_root(),
             ..default()
         })
         .set(WindowPlugin {
@@ -95,8 +124,10 @@ fn configure_app(app: &mut App, allow_any_thread: bool) {
         winit.run_on_any_thread = true;
         plugins = plugins.set(winit);
     }
-    app.add_plugins(plugins)
-        .init_state::<AppState>()
+    app.add_plugins(plugins);
+    #[cfg(target_os = "android")]
+    app.insert_resource(WinitSettings::mobile());
+    app.init_state::<AppState>()
         .insert_resource(CoreBridge::default())
         .insert_resource(ActiveProjection::default())
         .insert_resource(GameSession::default())
@@ -105,7 +136,8 @@ fn configure_app(app: &mut App, allow_any_thread: bool) {
         .insert_resource(GameTickTimer::default())
         .insert_resource(LevelRegistry::load_builtin())
         .insert_resource(LevelSelection::default())
-        .insert_resource(GameSave(load_save()))
+        .insert_resource(save_backend)
+        .insert_resource(game_save)
         .insert_resource(SpeedrunTimer::default())
         .insert_resource(LevelCountdown::default())
         .insert_resource(MainMenuState::default())
@@ -277,6 +309,20 @@ fn configure_app(app: &mut App, allow_any_thread: bool) {
                 .after(render::sync_visuals)
                 .before(interpolation::advance_interpolation_system),
         );
+    #[cfg(target_os = "android")]
+    {
+        app.add_systems(OnEnter(AppState::Playing), touch_controls::spawn_touch_controls)
+            .add_systems(OnExit(AppState::Playing), touch_controls::cleanup_touch_controls)
+            .add_systems(
+                Update,
+                (
+                    touch_controls::move_pad_input,
+                    touch_controls::move_pad_hold,
+                    touch_controls::shoot_pad_input,
+                )
+                    .run_if(in_state(AppState::Playing)),
+            );
+    }
 }
 
 fn setup(

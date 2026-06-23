@@ -6,7 +6,7 @@ use crate::audio::AudioGate;
 use crate::bridge::{CoreBridge, LoadLevelEvent, ReloadVisualsEvent};
 use crate::game_menus::{dismiss_game_menu, GameMenuRoot};
 use crate::levels::{LevelRegistry, LevelSelection};
-use crate::persistence::{GameSave, persist_save};
+use crate::persistence::{GameSave, SaveBackend, persist_save};
 use crate::ui::LevelCountdown;
 
 /// Swallow menu keys for a few frames after entering gameplay (prevents Enter bleed).
@@ -116,6 +116,46 @@ fn turn_robbo(bridge: &mut CoreBridge, dir: Direction) {
     bridge.last_direction = dir;
 }
 
+/// Touch move pad: tap a new direction to turn, same direction to step.
+#[cfg_attr(not(target_os = "android"), allow(dead_code))]
+pub(crate) fn apply_move_pad_press(
+    bridge: &mut CoreBridge,
+    steering: &mut SteeringState,
+    dir: Direction,
+) {
+    if dir == bridge.facing_direction {
+        steering.tap_move = Some(dir);
+    } else {
+        turn_robbo(bridge, dir);
+    }
+}
+
+#[cfg_attr(not(target_os = "android"), allow(dead_code))]
+pub(crate) fn apply_move_pad_hold(steering: &mut SteeringState, dir: Direction) {
+    steering.hold = Some(dir);
+}
+
+#[cfg_attr(not(target_os = "android"), allow(dead_code))]
+pub(crate) fn apply_move_pad_release(steering: &mut SteeringState, dir: Direction) {
+    if steering.hold == Some(dir) {
+        steering.hold = None;
+    }
+    if steering.tap_move == Some(dir) {
+        steering.tap_move = None;
+    }
+}
+
+/// Touch shoot pad: face direction and fire on press.
+#[cfg_attr(not(target_os = "android"), allow(dead_code))]
+pub(crate) fn apply_shoot_pad_press(
+    bridge: &mut CoreBridge,
+    steering: &mut SteeringState,
+    dir: Direction,
+) {
+    turn_robbo(bridge, dir);
+    steering.shoot_pending = true;
+}
+
 fn update_steering(keys: &ButtonInput<KeyCode>, bridge: &mut CoreBridge, steering: &mut SteeringState) {
     for dir in [
         Direction::Up,
@@ -173,6 +213,7 @@ pub fn keyboard_input(
     mut reload: EventWriter<ReloadVisualsEvent>,
     countdown: Res<LevelCountdown>,
     mut save: ResMut<GameSave>,
+    backend: Res<SaveBackend>,
     mut gate: ResMut<AudioGate>,
     mut cooldown: ResMut<InputCooldown>,
     menu_roots: Query<Entity, With<GameMenuRoot>>,
@@ -213,7 +254,7 @@ pub fn keyboard_input(
                     if let Some(level) = pack.levels.get(selection.level_index) {
                         save.0.profile.last_pack = pack.name.clone();
                         save.0.profile.last_level = level.index;
-                        persist_save(&save.0);
+                        persist_save(&backend, &save.0);
                     }
                 }
                 load_events.send(LoadLevelEvent { restart: false });

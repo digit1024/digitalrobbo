@@ -1,0 +1,1 @@
+/home/digit1024/proj/digitalrobbo/mobile/android/app/build/intermediates/cxx/Debug/4i48133m/obj/armeabi-v7a

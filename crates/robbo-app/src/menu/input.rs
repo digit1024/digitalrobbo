@@ -18,7 +18,7 @@ use crate::audio::{
 use crate::bridge::LoadLevelEvent;
 use crate::input::{begin_playing, InputCooldown};
 use crate::levels::{resolve_last_level, LevelRegistry, LevelSelection};
-use crate::persistence::{persist_save, GameSave};
+use crate::persistence::{persist_save, GameSave, SaveBackend};
 use crate::viewport;
 
 const COLOR_ITEM: Color = Color::srgb(0.95, 0.95, 1.0);
@@ -230,6 +230,7 @@ pub fn keyboard_input(
     mut menu_state: ResMut<MainMenuState>,
     mut dirty: ResMut<MainMenuUiDirty>,
     mut save: ResMut<GameSave>,
+    backend: Res<SaveBackend>,
     bgm: Res<BgmState>,
     sinks: Query<&AudioSink>,
     registry: Res<LevelRegistry>,
@@ -255,6 +256,7 @@ pub fn keyboard_input(
     match menu_state.screen {
         MainMenuScreen::Settings => settings_keys(
             &keys,
+            &backend,
             &mut menu_state,
             &mut dirty,
             &mut save,
@@ -268,6 +270,7 @@ pub fn keyboard_input(
         ),
         MainMenuScreen::LevelSelect => level_select_keys(
             &keys,
+            &backend,
             &mut menu_state,
             &mut dirty,
             &mut save,
@@ -288,6 +291,7 @@ pub fn keyboard_input(
                 };
                 apply_action(
                     action,
+                    &backend,
                     &mut menu_state,
                     &mut dirty,
                     &mut save,
@@ -306,6 +310,7 @@ pub fn keyboard_input(
 
 fn settings_keys(
     keys: &ButtonInput<KeyCode>,
+    backend: &SaveBackend,
     menu_state: &mut MainMenuState,
     dirty: &mut MainMenuUiDirty,
     save: &mut GameSave,
@@ -320,6 +325,7 @@ fn settings_keys(
     if keys.just_pressed(KeyCode::ArrowLeft) {
         apply_action(
             MainMenuAction::MusicLess,
+            backend,
             menu_state,
             dirty,
             save,
@@ -335,6 +341,7 @@ fn settings_keys(
     if keys.just_pressed(KeyCode::ArrowRight) {
         apply_action(
             MainMenuAction::MusicMore,
+            backend,
             menu_state,
             dirty,
             save,
@@ -350,6 +357,7 @@ fn settings_keys(
     if keys.just_pressed(KeyCode::KeyM) {
         apply_action(
             MainMenuAction::ToggleMute,
+            backend,
             menu_state,
             dirty,
             save,
@@ -365,6 +373,7 @@ fn settings_keys(
     if keys.just_pressed(KeyCode::Escape) {
         apply_action(
             MainMenuAction::Back,
+            backend,
             menu_state,
             dirty,
             save,
@@ -385,6 +394,7 @@ fn settings_keys(
         };
         apply_action(
             action,
+            backend,
             menu_state,
             dirty,
             save,
@@ -401,6 +411,7 @@ fn settings_keys(
 
 fn level_select_keys(
     keys: &ButtonInput<KeyCode>,
+    backend: &SaveBackend,
     menu_state: &mut MainMenuState,
     dirty: &mut MainMenuUiDirty,
     save: &mut GameSave,
@@ -434,6 +445,7 @@ fn level_select_keys(
     if keys.just_pressed(KeyCode::Escape) {
         apply_action(
             MainMenuAction::Back,
+            backend,
             menu_state,
             dirty,
             save,
@@ -449,6 +461,7 @@ fn level_select_keys(
     if keys.just_pressed(KeyCode::Enter) {
         apply_action(
             MainMenuAction::PlayLevel,
+            backend,
             menu_state,
             dirty,
             save,
@@ -468,6 +481,7 @@ pub fn pointer_input(
     mut menu_state: ResMut<MainMenuState>,
     mut dirty: ResMut<MainMenuUiDirty>,
     mut save: ResMut<GameSave>,
+    backend: Res<SaveBackend>,
     bgm: Res<BgmState>,
     sinks: Query<&AudioSink>,
     registry: Res<LevelRegistry>,
@@ -493,6 +507,7 @@ pub fn pointer_input(
         }
         apply_action(
             *action,
+            &backend,
             &mut menu_state,
             &mut dirty,
             &mut save,
@@ -509,6 +524,7 @@ pub fn pointer_input(
 
 fn apply_action(
     action: MainMenuAction,
+    backend: &SaveBackend,
     menu_state: &mut MainMenuState,
     dirty: &mut MainMenuUiDirty,
     save: &mut GameSave,
@@ -521,7 +537,7 @@ fn apply_action(
     next: &mut NextState<AppState>,
 ) {
     match action {
-        MainMenuAction::Start => start_game(registry, save, level_selection, load_events, cooldown, next),
+        MainMenuAction::Start => start_game(backend, registry, save, level_selection, load_events, cooldown, next),
         MainMenuAction::OpenLevelSelect => {
             resolve_last_level(registry, &save.0.profile, level_selection);
             menu_state.screen = MainMenuScreen::LevelSelect;
@@ -539,15 +555,15 @@ fn apply_action(
             dirty.0 = true;
         }
         MainMenuAction::MusicLess => {
-            adjust_music_volume(save, -MUSIC_VOLUME_STEP);
+            adjust_music_volume(backend, save, -MUSIC_VOLUME_STEP);
             apply_live_music_volume(save, bgm, sinks);
         }
         MainMenuAction::MusicMore => {
-            adjust_music_volume(save, MUSIC_VOLUME_STEP);
+            adjust_music_volume(backend, save, MUSIC_VOLUME_STEP);
             apply_live_music_volume(save, bgm, sinks);
         }
         MainMenuAction::ToggleMute => {
-            toggle_mute(save);
+            toggle_mute(backend, save);
             apply_live_music_volume(save, bgm, sinks);
             dirty.0 = true;
         }
@@ -578,7 +594,7 @@ fn apply_action(
                 if let Some(level) = pack.levels.get(level_selection.level_index) {
                     save.0.profile.last_pack = pack.name.clone();
                     save.0.profile.last_level = level.index;
-                    persist_save(&save.0);
+                    persist_save(backend, &save.0);
                 }
             }
             load_events.send(LoadLevelEvent { restart: false });
@@ -589,6 +605,7 @@ fn apply_action(
 }
 
 fn start_game(
+    backend: &SaveBackend,
     registry: &LevelRegistry,
     save: &mut GameSave,
     selection: &mut LevelSelection,
@@ -601,7 +618,7 @@ fn start_game(
         if let Some(level) = pack.levels.get(selection.level_index) {
             save.0.profile.last_pack = pack.name.clone();
             save.0.profile.last_level = level.index;
-            persist_save(&save.0);
+            persist_save(backend, &save.0);
         }
     }
     load_events.send(LoadLevelEvent { restart: false });

@@ -6,3 +6,6 @@
 *.swp
 dist/
 .trunk/
+mobile/android/app/build/
+mobile/android/.gradle/
+mobile/android/app/src/main/jniLibs/

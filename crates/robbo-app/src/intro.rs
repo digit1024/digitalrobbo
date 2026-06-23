@@ -5,7 +5,7 @@ use bevy::window::PrimaryWindow;
 
 use crate::app_state::AppState;
 use crate::audio::{play_menu_bgm_now, AudioGate};
-use crate::persistence::{persist_save, GameFont, GameSave};
+use crate::persistence::{persist_save, GameFont, GameSave, SaveBackend};
 use crate::ui_anim::UiFade;
 use crate::viewport::{self, design_center, DESIGN_HEIGHT, DESIGN_WIDTH};
 
@@ -198,6 +198,7 @@ pub fn update_intro_sequence(
     mut sequence: Option<ResMut<IntroSequence>>,
     mut next: ResMut<NextState<AppState>>,
     mut save: ResMut<GameSave>,
+    backend: Res<SaveBackend>,
     mut commands: Commands,
     font: Res<GameFont>,
     window: Query<&Window, With<PrimaryWindow>>,
@@ -307,7 +308,7 @@ pub fn update_intro_sequence(
     };
 
     if sequence.phase == IntroPhase::Done {
-        finish_intro(&mut save, &mut next);
+        finish_intro(&backend, &mut save, &mut next);
     }
 }
 
@@ -377,9 +378,9 @@ pub fn intro_title_fly(
     }
 }
 
-fn finish_intro(save: &mut GameSave, next: &mut NextState<AppState>) {
+fn finish_intro(backend: &SaveBackend, save: &mut GameSave, next: &mut NextState<AppState>) {
     save.0.profile.intro_seen = true;
-    persist_save(&save.0);
+    persist_save(backend, &save.0);
     next.set(AppState::MainMenu);
 }
 
@@ -390,6 +391,7 @@ pub fn intro_skip_input(
     mut sequence: Option<ResMut<IntroSequence>>,
     mut gate: ResMut<AudioGate>,
     mut save: ResMut<GameSave>,
+    backend: Res<SaveBackend>,
     mut next: ResMut<NextState<AppState>>,
     mut commands: Commands,
     asset_server: Res<AssetServer>,
@@ -421,7 +423,7 @@ pub fn intro_skip_input(
         }
         sequence.skipped = true;
         sequence.phase = IntroPhase::Done;
-        finish_intro(&mut save, &mut next);
+        finish_intro(&backend, &mut save, &mut next);
     }
 }
 

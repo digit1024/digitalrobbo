@@ -6,7 +6,7 @@ use crate::audio::{play_countdown_tick, GameAudio};
 use crate::bridge::{CoreBridge, CoreGameEvent, GameSession, LoadLevelEvent, ReloadVisualsEvent};
 use crate::input::SteeringState;
 use crate::levels::{LevelRegistry, LevelSelection};
-use crate::persistence::{GameSave, LevelProgress, persist_save};
+use crate::persistence::{GameSave, LevelProgress, SaveBackend, persist_save};
 
 #[derive(Resource, Default)]
 pub struct SpeedrunTimer {
@@ -197,6 +197,7 @@ pub fn on_core_events(
     mut next: ResMut<NextState<AppState>>,
     mut timer: ResMut<SpeedrunTimer>,
     mut save: ResMut<GameSave>,
+    backend: Res<SaveBackend>,
     session: Res<GameSession>,
 ) {
     for CoreGameEvent(event) in reader.read() {
@@ -222,7 +223,7 @@ pub fn on_core_events(
                 if entry.best_tries == 0 || session.tries < entry.best_tries {
                     entry.best_tries = session.tries;
                 }
-                persist_save(&save.0);
+                persist_save(&backend, &save.0);
                 bevy::log::info!("Level complete in {}ms", timer.elapsed_ms);
                 next.set(AppState::LevelComplete);
             }
