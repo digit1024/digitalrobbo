@@ -2,16 +2,17 @@ use bevy::prelude::*;
 use robbo_core::{Direction, ElementKind, GunType, TileKind};
 
 pub const TILE_PX: f32 = 80.0;
+/// Pixel size of one cell in `sprites/player/player_spritesheet.png` (6 cols × 4 rows).
+pub const PLAYER_FRAME_PX: f32 = 128.0;
 
 /// Pre-loaded image handles for every game element.
 /// Insert as a Resource at startup, then pass into render systems.
 #[derive(Resource)]
 pub struct SpriteAssets {
-    // ── Robbo walk cycle: [dir_idx][frame 0-5]
-    // dir_idx: right=0, down=1, left=2, up=3
-    pub player: [[Handle<Image>; 6]; 4],
+    /// Robbo walk cycle spritesheet; slice with `player_frame_rect`.
+    pub player_sheet: Handle<Image>,
     // ── entities ─────────────────────────────────────────────
-    // (Robbo uses self.player[]; the separate `robbo` field was removed)
+    // (Robbo uses self.player_sheet; the separate `robbo` field was removed)
     pub screw: Handle<Image>,
     pub capsule: Handle<Image>,
     pub capsule_ready: Handle<Image>,
@@ -46,22 +47,22 @@ pub struct SpriteAssets {
 }
 
 impl SpriteAssets {
-    /// Player walk frame: dir_idx matches `dir_to_idx`, frame is 0-5.
-    pub fn player_frame(&self, dir: Direction, frame: usize) -> Handle<Image> {
-        self.player[dir_to_idx(dir)][frame % 6].clone()
+    /// UV rect for one Robbo walk frame (dir_idx matches `dir_to_idx`, frame is 0-5).
+    pub fn player_frame_rect(dir: Direction, frame: usize) -> Rect {
+        let col = (frame % 6) as f32;
+        let row = dir_to_idx(dir) as f32;
+        let o = PLAYER_FRAME_PX;
+        Rect::from_corners(Vec2::new(col * o, row * o), Vec2::new((col + 1.0) * o, (row + 1.0) * o))
+    }
+
+    pub fn player_sprite(&self, dir: Direction, frame: usize) -> (Handle<Image>, Rect) {
+        (self.player_sheet.clone(), Self::player_frame_rect(dir, frame))
     }
 
     pub fn load(server: &AssetServer) -> Self {
         let sp = |name: &str| server.load(format!("sprites/{name}.png"));
-        // dir order: right=0, down=1, left=2, up=3  (matches dir_to_idx)
-        let dir_names = ["right", "down", "left", "up"];
-        let player = std::array::from_fn(|di| {
-            std::array::from_fn(|fi| {
-                server.load(format!("sprites/player/{}_{:02}.png", dir_names[di], fi + 1))
-            })
-        });
         Self {
-            player,
+            player_sheet: server.load("sprites/player/player_spritesheet.png"),
             screw:        sp("screw"),
             capsule:      sp("capsule"),
             capsule_ready: sp("capsule_ready"),
@@ -92,10 +93,9 @@ impl SpriteAssets {
         }
     }
 
-    pub fn for_element(&self, kind: &ElementKind, dir: Direction) -> Handle<Image> {
-        let dir_idx = dir_to_idx(dir);
+    pub fn for_element(&self, kind: &ElementKind, _dir: Direction) -> Handle<Image> {
         match kind {
-            ElementKind::Robbo => self.player[dir_idx][0].clone(),
+            ElementKind::Robbo => self.player_sheet.clone(),
             ElementKind::Screw => self.screw.clone(),
             ElementKind::Capsule => self.capsule.clone(),
             ElementKind::Bomb => self.bomb.clone(),

@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 use robbo_core::{Cell, Direction, ElementKind, GameEvent, TileKind};
 
-use crate::assets::{SpriteAssets, bear_direction_rotation, dir_to_idx};
+use crate::assets::{SpriteAssets, bear_direction_rotation};
 use crate::bridge::{CoreBridge, EntityMap, GameSession, GameTickTimer, ReloadVisualsEvent, TileEntityMap, TICK_SECS};
 use crate::effects::{
     attach_butterfly_visual, reset_magnet_beams, CapsuleVisual, CollectPopEffect, FxParticle,
@@ -102,6 +102,17 @@ fn spawn_element_sprite(
     if projectile_visual_for(kind).is_some() {
         let (sprite, visual) = projectile_sprite_bundle(kind, direction, tile);
         (sprite, Some(visual))
+    } else if matches!(kind, ElementKind::Robbo) {
+        let (image, rect) = sa.player_sprite(direction, 0);
+        (
+            Sprite {
+                image,
+                rect: Some(rect),
+                custom_size: Some(Vec2::splat(tile)),
+                ..default()
+            },
+            None,
+        )
     } else {
         (
             Sprite {
@@ -184,31 +195,36 @@ pub fn sync_visuals(
     projection: Res<ActiveProjection>,
     assets: Option<Res<SpriteAssets>>,
     mut entity_map: ResMut<EntityMap>,
-    mut tile_map: ResMut<TileEntityMap>,
+    tile_map: Res<TileEntityMap>,
     mut commands: Commands,
     mut motion_q: Query<(&VisualEntityId, &mut VisualMotion)>,
+    mut tile_q: Query<
+        (&mut TileSprite, &mut Sprite, &mut Transform),
+        Without<TileVanishEffect>,
+    >,
     level_roots: Query<Entity, With<LevelRoot>>,
 ) {
-    if bridge.events_queue.is_empty() {
-        return;
-    }
+    let has_events = !bridge.events_queue.is_empty();
 
     // Index moves before spawn so new projectiles/lasers start at the correct origin cell.
     let mut moves: std::collections::HashMap<u32, (Cell, Cell)> = std::collections::HashMap::new();
     let mut teleports: std::collections::HashMap<u32, (Cell, Cell)> = std::collections::HashMap::new();
-    for event in &bridge.events_queue {
-        match event {
-            GameEvent::Moved { entity_id, from, to }
-            | GameEvent::Pushed { entity_id, from, to } => {
-                moves.insert(*entity_id, (*from, *to));
+    if has_events {
+        for event in &bridge.events_queue {
+            match event {
+                GameEvent::Moved { entity_id, from, to }
+                | GameEvent::Pushed { entity_id, from, to } => {
+                    moves.insert(*entity_id, (*from, *to));
+                }
+                GameEvent::Teleported { entity_id, from, to } => {
+                    teleports.insert(*entity_id, (*from, *to));
+                }
+                _ => {}
             }
-            GameEvent::Teleported { entity_id, from, to } => {
-                teleports.insert(*entity_id, (*from, *to));
-            }
-            _ => {}
         }
     }
 
+    // Always reconcile entities — sim often removes/spawns without emitting events.
     let current_ids: std::collections::HashSet<u32> =
         bridge.world.elements.iter().map(|(_, s)| s.id).collect();
 
@@ -321,51 +337,61 @@ pub fn sync_visuals(
         entity_map.0.insert(state.id, id);
     }
 
-    for event in &bridge.events_queue {
-        match event {
-            GameEvent::Exploded { at } | GameEvent::Revealed { at } => {
-                spawn_explosion_effect(
-                    &mut commands,
-                    &projection,
-                    *at,
-                    level_roots.iter().next(),
-                );
-            }
-            GameEvent::DoorOpened { at } | GameEvent::TileCleared { at, .. } => {
-                start_tile_vanish(&mut commands, &tile_map, *at);
-            }
-            GameEvent::Moved { entity_id, from, to }
-            | GameEvent::Pushed { entity_id, from, to } => {
-                if let Some(&entity) = entity_map.0.get(entity_id) {
-                    let step = bridge
-                        .world
-                        .elements
-                        .iter()
-                        .find(|(_, s)| s.id == *entity_id)
-                        .map(|(_, s)| visual_step_ticks(&s.kind, s))
-                        .unwrap_or(1);
-                    if let Ok((_, mut motion)) = motion_q.get_mut(entity) {
-                        motion.retarget(*from, *to, sim_tick, step);
+    sync_tile_visuals(
+        &bridge.world,
+        &tile_map,
+        assets.as_deref(),
+        tile,
+        &mut tile_q,
+    );
+
+    if has_events {
+        for event in &bridge.events_queue {
+            match event {
+                GameEvent::Exploded { at } | GameEvent::Revealed { at } => {
+                    spawn_explosion_effect(
+                        &mut commands,
+                        &projection,
+                        *at,
+                        level_roots.iter().next(),
+                    );
+                }
+                GameEvent::DoorOpened { at } | GameEvent::TileCleared { at, .. } => {
+                    start_tile_vanish(&mut commands, &tile_map, *at);
+                }
+                GameEvent::Moved { entity_id, from, to }
+                | GameEvent::Pushed { entity_id, from, to } => {
+                    if let Some(&entity) = entity_map.0.get(entity_id) {
+                        let step = bridge
+                            .world
+                            .elements
+                            .iter()
+                            .find(|(_, s)| s.id == *entity_id)
+                            .map(|(_, s)| visual_step_ticks(&s.kind, s))
+                            .unwrap_or(1);
+                        if let Ok((_, mut motion)) = motion_q.get_mut(entity) {
+                            motion.retarget(*from, *to, sim_tick, step);
+                        }
                     }
                 }
+                _ => {}
             }
-            _ => {}
         }
-    }
 
-    for (entity_id, (_from, to)) in teleports {
-        if let Some(&entity) = entity_map.0.get(&entity_id) {
-            if let Ok((_, mut motion)) = motion_q.get_mut(entity) {
-                *motion = VisualMotion::settled(to, sim_tick);
+        for (entity_id, (_from, to)) in teleports {
+            if let Some(&entity) = entity_map.0.get(&entity_id) {
+                if let Ok((_, mut motion)) = motion_q.get_mut(entity) {
+                    *motion = VisualMotion::settled(to, sim_tick);
+                }
+                let pos = projection.project(to, 1.0);
+                commands.entity(entity).insert((
+                    Transform::from_translation(pos),
+                    Visibility::Hidden,
+                    TeleportReveal {
+                        timer: Timer::from_seconds(TICK_SECS, TimerMode::Once),
+                    },
+                ));
             }
-            let pos = projection.project(to, 1.0);
-            commands.entity(entity).insert((
-                Transform::from_translation(pos),
-                Visibility::Hidden,
-                TeleportReveal {
-                    timer: Timer::from_seconds(TICK_SECS, TimerMode::Once),
-                },
-            ));
         }
     }
 
@@ -413,9 +439,9 @@ pub fn update_robbo_sprite(
     let Ok((_, mut sprite)) = query.get_mut(*entity) else {
         return;
     };
-    let dir_idx = dir_to_idx(bridge.facing_direction);
     let frame = bridge.walk_frame;
-    sprite.image = sa.player[dir_idx][frame].clone();
+    sprite.image = sa.player_sheet.clone();
+    sprite.rect = Some(SpriteAssets::player_frame_rect(bridge.facing_direction, frame));
 }
 
 /// Keep directional sprites in sync with sim state (bears turning, guns rotating, etc.).
@@ -739,6 +765,43 @@ pub fn reset_sim_on_menu(
     timer.running = false;
     *countdown = LevelCountdown::default();
     *steering = SteeringState::default();
+}
+
+/// Keep tile sprites aligned with sim tiles (barrier slides, stop clears, ?→ground, etc.).
+fn sync_tile_visuals(
+    world: &robbo_core::World,
+    tile_map: &TileEntityMap,
+    assets: Option<&SpriteAssets>,
+    tile_size: f32,
+    tile_q: &mut Query<
+        (&mut TileSprite, &mut Sprite, &mut Transform),
+        Without<TileVanishEffect>,
+    >,
+) {
+    for (&cell, &entity) in &tile_map.0 {
+        let Some(sim_kind) = world.tile_at(cell) else {
+            continue;
+        };
+        let Ok((mut tile_sprite, mut sprite, mut transform)) = tile_q.get_mut(entity) else {
+            continue;
+        };
+        if tile_sprite.tile_kind == sim_kind {
+            continue;
+        }
+        tile_sprite.tile_kind = sim_kind;
+        transform.scale = Vec3::ONE;
+        if let Some(sa) = assets {
+            if let Some(img) = sa.for_tile(sim_kind) {
+                sprite.image = img;
+                sprite.color = Color::WHITE;
+            } else {
+                sprite.color = fallback_tile_color(sim_kind);
+            }
+        } else {
+            sprite.color = fallback_tile_color(sim_kind);
+        }
+        sprite.custom_size = Some(Vec2::splat(tile_size));
+    }
 }
 
 fn start_tile_vanish(commands: &mut Commands, tile_map: &TileEntityMap, cell: Cell) {
