@@ -147,6 +147,9 @@ pub fn load_audio_manifest(
         sfx,
     });
     commands.insert_resource(BgmState::default());
+    #[cfg(not(target_arch = "wasm32"))]
+    commands.insert_resource(AudioGate { unlocked: true });
+    #[cfg(target_arch = "wasm32")]
     commands.insert_resource(AudioGate::default());
     commands.insert_resource(PendingLevelBgm::default());
     commands.insert_resource(EnemyAmbientSounds::default());
@@ -191,12 +194,16 @@ fn stop_bgm_internal(commands: &mut Commands, bgm: &mut BgmState) {
 
 fn start_bgm(
     commands: &mut Commands,
+    asset_server: &AssetServer,
     bgm: &mut BgmState,
     path: &str,
     handle: Handle<AudioSource>,
     volume: f32,
 ) {
     if bgm.track_path.as_deref() == Some(path) && bgm.entity.is_some() {
+        return;
+    }
+    if !asset_server.load_state(&handle).is_loaded() {
         return;
     }
     stop_bgm_internal(commands, bgm);
@@ -216,18 +223,60 @@ fn start_bgm(
 
 pub fn play_menu_bgm(
     mut commands: Commands,
+    asset_server: Res<AssetServer>,
     audio: Res<GameAudio>,
     manifest: Res<AudioManifest>,
     mut bgm: ResMut<BgmState>,
     save: Res<GameSave>,
     gate: Res<AudioGate>,
 ) {
-    play_menu_bgm_now(&mut commands, &audio, &manifest, &mut bgm, &save, &gate);
+    play_menu_bgm_now(
+        &mut commands,
+        &asset_server,
+        &audio,
+        &manifest,
+        &mut bgm,
+        &save,
+        &gate,
+    );
+}
+
+/// Keep menu music running while on the main menu (gate unlock, return from level, asset load).
+pub fn ensure_menu_bgm(
+    mut commands: Commands,
+    state: Res<State<AppState>>,
+    asset_server: Res<AssetServer>,
+    audio: Res<GameAudio>,
+    manifest: Res<AudioManifest>,
+    mut bgm: ResMut<BgmState>,
+    save: Res<GameSave>,
+    gate: Res<AudioGate>,
+) {
+    if *state.get() != AppState::MainMenu || !gate.unlocked {
+        return;
+    }
+    let menu_path = manifest.0.menu_music.as_str();
+    if bgm.track_path.as_deref() == Some(menu_path) && bgm.entity.is_some() {
+        if asset_server.load_state(&audio.menu_bgm).is_loaded() {
+            return;
+        }
+        stop_bgm_internal(&mut commands, &mut bgm);
+    }
+    play_menu_bgm_now(
+        &mut commands,
+        &asset_server,
+        &audio,
+        &manifest,
+        &mut bgm,
+        &save,
+        &gate,
+    );
 }
 
 /// Callable from intro when the title card appears (original `showTitle` timing).
 pub fn play_menu_bgm_now(
     commands: &mut Commands,
+    asset_server: &AssetServer,
     audio: &GameAudio,
     manifest: &AudioManifest,
     bgm: &mut BgmState,
@@ -239,6 +288,7 @@ pub fn play_menu_bgm_now(
     }
     start_bgm(
         commands,
+        asset_server,
         bgm,
         &manifest.0.menu_music,
         audio.menu_bgm.clone(),
@@ -265,6 +315,7 @@ pub fn queue_level_bgm_on_load(
 
 pub fn start_level_bgm_after_countdown(
     mut commands: Commands,
+    asset_server: Res<AssetServer>,
     countdown: Res<LevelCountdown>,
     pending: Res<PendingLevelBgm>,
     audio: Res<GameAudio>,
@@ -289,6 +340,7 @@ pub fn start_level_bgm_after_countdown(
     let handle = audio.level_bgm[idx].clone();
     start_bgm(
         &mut commands,
+        &asset_server,
         &mut bgm,
         path,
         handle,
@@ -298,6 +350,7 @@ pub fn start_level_bgm_after_countdown(
 
 pub fn resume_bgm_on_unpause(
     mut commands: Commands,
+    asset_server: Res<AssetServer>,
     pending: Res<PendingLevelBgm>,
     audio: Res<GameAudio>,
     manifest: Res<AudioManifest>,
@@ -320,6 +373,7 @@ pub fn resume_bgm_on_unpause(
     };
     start_bgm(
         &mut commands,
+        &asset_server,
         &mut bgm,
         path,
         audio.level_bgm[idx].clone(),

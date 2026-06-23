@@ -27,7 +27,8 @@ pub mod test_harness;
 use app_state::AppState;
 use assets::SpriteAssets;
 use audio::{
-    cleanup_enemy_ambient_sounds, load_audio_manifest, play_menu_bgm, queue_level_bgm_on_load,
+    cleanup_enemy_ambient_sounds, ensure_menu_bgm, load_audio_manifest, play_menu_bgm,
+    queue_level_bgm_on_load,
     resume_bgm_on_unpause, sfx_on_core_events, start_level_bgm_after_countdown, stop_bgm,
     unlock_audio_on_input, update_enemy_ambient_sounds,
 };
@@ -161,6 +162,7 @@ fn configure_app(app: &mut App, allow_any_thread: bool) {
                 queue_level_bgm_on_load,
                 start_level_bgm_after_countdown,
                 unlock_audio_on_input,
+                ensure_menu_bgm.after(unlock_audio_on_input),
                 ui_anim::tick_ui_fade,
                 hud_button_input,
                 game_menu_button_input,

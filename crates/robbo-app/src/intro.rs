@@ -315,6 +315,7 @@ pub fn intro_title_music(
     state: Res<State<AppState>>,
     mut sequence: Option<ResMut<IntroSequence>>,
     mut commands: Commands,
+    asset_server: Res<AssetServer>,
     audio: Option<Res<crate::audio::GameAudio>>,
     manifest: Option<Res<crate::audio::AudioManifest>>,
     mut bgm: Option<ResMut<crate::audio::BgmState>>,
@@ -336,7 +337,15 @@ pub fn intro_title_music(
         return;
     };
     sequence.music_started = true;
-    play_menu_bgm_now(&mut commands, &audio, &manifest, &mut bgm, &save, &gate);
+    play_menu_bgm_now(
+        &mut commands,
+        &asset_server,
+        &audio,
+        &manifest,
+        &mut bgm,
+        &save,
+        &gate,
+    );
 }
 
 pub fn intro_title_fly(
@@ -383,6 +392,7 @@ pub fn intro_skip_input(
     mut save: ResMut<GameSave>,
     mut next: ResMut<NextState<AppState>>,
     mut commands: Commands,
+    asset_server: Res<AssetServer>,
     audio: Option<Res<crate::audio::GameAudio>>,
     manifest: Option<Res<crate::audio::AudioManifest>>,
     mut bgm: Option<ResMut<crate::audio::BgmState>>,
@@ -398,7 +408,15 @@ pub fn intro_skip_input(
         if !sequence.music_started {
             if let (Some(audio), Some(manifest), Some(mut bgm)) = (audio, manifest, bgm) {
                 sequence.music_started = true;
-                play_menu_bgm_now(&mut commands, &audio, &manifest, &mut bgm, &save, &gate);
+                play_menu_bgm_now(
+                    &mut commands,
+                    &asset_server,
+                    &audio,
+                    &manifest,
+                    &mut bgm,
+                    &save,
+                    &gate,
+                );
             }
         }
         sequence.skipped = true;
