@@ -4,7 +4,7 @@ use bevy::asset::RenderAssetUsages;
 use bevy::prelude::*;
 use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat};
 use bevy::ui::widget::ImageNode;
-use bevy::ui::FocusPolicy;
+use bevy::ui::{ComputedUiTargetCamera, FocusPolicy, UiGlobalTransform};
 use bevy::window::PrimaryWindow;
 use robbo_core::Direction;
 
@@ -242,24 +242,26 @@ fn rasterize_donut(
 }
 
 /// Same coordinate path as Bevy's `ui_focus_system` (physical viewport space).
-fn pointer_to_normalized(
-    pointer_logical: Vec2,
-    window: &Window,
-    camera: &Camera,
-    node: &ComputedNode,
-    global: &GlobalTransform,
-) -> Option<Vec2> {
-    let size = node.size();
-    if size.x <= 0.0 || size.y <= 0.0 {
-        return None;
-    }
+fn touch_viewport_pos(touch_logical: Vec2, window: &Window, camera: &Camera) -> Vec2 {
     let viewport_min = camera
         .physical_viewport_rect()
         .map(|rect| rect.min.as_vec2())
         .unwrap_or_default();
-    let cursor = pointer_logical * window.scale_factor() - viewport_min;
-    let node_rect = Rect::from_center_size(global.translation().truncate(), size);
-    Some((cursor - node_rect.min) / size)
+    touch_logical * window.scale_factor() - viewport_min
+}
+
+/// Map a touch to pad-local coords (0..1, center at 0.5) via Bevy 0.18 UI transforms.
+fn pointer_to_normalized(
+    touch_logical: Vec2,
+    window: &Window,
+    camera: &Camera,
+    node: &ComputedNode,
+    ui_transform: &UiGlobalTransform,
+) -> Option<Vec2> {
+    let cursor = touch_viewport_pos(touch_logical, window, camera);
+    // `normalize_point` is center-origin (-0.5..0.5); donut math expects top-left 0..1.
+    node.normalize_point(*ui_transform, cursor)
+        .map(|n| n + Vec2::splat(0.5))
 }
 
 fn point_in_pad(norm: Vec2) -> bool {
@@ -462,14 +464,15 @@ pub fn donut_pad_touch(
     state: Res<State<AppState>>,
     countdown: Res<LevelCountdown>,
     window: Query<&Window, With<PrimaryWindow>>,
-    camera: Query<&Camera, With<Camera2d>>,
+    cameras: Query<&Camera>,
     touches: Res<Touches>,
     mut bridge: ResMut<CoreBridge>,
     mut steering: ResMut<SteeringState>,
     mut pads: Query<(
         &DonutPad,
         &ComputedNode,
-        &GlobalTransform,
+        &UiGlobalTransform,
+        &ComputedUiTargetCamera,
         &mut DonutPadActive,
         &mut DonutPadTracking,
         &Children,
@@ -483,11 +486,14 @@ pub fn donut_pad_touch(
     let Ok(window) = window.single() else {
         return;
     };
-    let Ok(camera) = camera.single() else {
-        return;
-    };
 
-    for (pad, node, global, mut active, mut tracking, children) in &mut pads {
+    for (pad, node, ui_transform, target_camera, mut active, mut tracking, children) in &mut pads {
+        let Some(camera_entity) = target_camera.get() else {
+            continue;
+        };
+        let Ok(camera) = cameras.get(camera_entity) else {
+            continue;
+        };
         if let Some(id) = tracking.touch_id {
             if touches.just_released(id) || touches.just_canceled(id) {
                 apply_quarter_change(pad, &mut active, None, &mut bridge, &mut steering);
@@ -503,7 +509,8 @@ pub fn donut_pad_touch(
                 continue;
             };
 
-            let norm = pointer_to_normalized(touch.position(), window, camera, node, global);
+            let norm =
+                pointer_to_normalized(touch.position(), window, camera, node, ui_transform);
             let quarter = norm.and_then(|n| donut_quarter_at_norm(n, node));
             apply_quarter_change(pad, &mut active, quarter, &mut bridge, &mut steering);
             set_quarter_overlays(active.quarter, children, &mut overlays);
@@ -516,7 +523,8 @@ pub fn donut_pad_touch(
         }
 
         for touch in touches.iter_just_pressed() {
-            let Some(norm) = pointer_to_normalized(touch.position(), window, camera, node, global)
+            let Some(norm) =
+                pointer_to_normalized(touch.position(), window, camera, node, ui_transform)
             else {
                 continue;
             };
