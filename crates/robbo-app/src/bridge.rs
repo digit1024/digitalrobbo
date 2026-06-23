@@ -22,6 +22,93 @@ pub struct LoadLevelEvent {
 #[derive(Event, Clone, Debug, Default)]
 pub struct ReloadVisualsEvent;
 
+#[derive(Resource, Default, Debug)]
+pub struct RenderAudit {
+    pub interval_frames: u32,
+    pub interval_spawned: u32,
+    pub interval_despawned: u32,
+    pub interval_reload_events: u32,
+    pub interval_full_rebuilds: u32,
+    pub interval_max_frame_ms: f32,
+    pub interval_elapsed: f32,
+    pub total_state_transitions: u32,
+}
+
+pub fn audit_frame_timing(
+    time: Res<Time>,
+    state: Res<State<AppState>>,
+    mut audit: ResMut<RenderAudit>,
+) {
+    if *state.get() != AppState::Playing {
+        return;
+    }
+    let dt_ms = time.delta_secs() * 1000.0;
+    audit.interval_frames += 1;
+    audit.interval_elapsed += time.delta_secs();
+    audit.interval_max_frame_ms = audit.interval_max_frame_ms.max(dt_ms);
+}
+
+pub fn audit_reload_events(
+    mut reload: EventReader<ReloadVisualsEvent>,
+    state: Res<State<AppState>>,
+    mut audit: ResMut<RenderAudit>,
+) {
+    if *state.get() != AppState::Playing {
+        return;
+    }
+    let mut count = 0u32;
+    for _ in reload.read() {
+        count += 1;
+    }
+    audit.interval_reload_events += count;
+}
+
+pub fn audit_state_transitions(
+    state: Res<State<AppState>>,
+    mut last_state: Local<Option<AppState>>,
+    mut audit: ResMut<RenderAudit>,
+) {
+    let current = state.get().clone();
+    match last_state.as_ref() {
+        Some(prev) if *prev != current => {
+            audit.total_state_transitions += 1;
+            *last_state = Some(current);
+        }
+        None => {
+            *last_state = Some(current);
+        }
+        _ => {}
+    }
+}
+
+pub fn audit_report(mut audit: ResMut<RenderAudit>, state: Res<State<AppState>>) {
+    if *state.get() != AppState::Playing || audit.interval_elapsed < 2.0 {
+        return;
+    }
+    let fps = if audit.interval_elapsed > 0.0 {
+        audit.interval_frames as f32 / audit.interval_elapsed
+    } else {
+        0.0
+    };
+    bevy::log::info!(
+        "AUDIT render: fps={:.1} max_dt_ms={:.1} spawned={} despawned={} reload_events={} full_rebuilds={} state_transitions_total={}",
+        fps,
+        audit.interval_max_frame_ms,
+        audit.interval_spawned,
+        audit.interval_despawned,
+        audit.interval_reload_events,
+        audit.interval_full_rebuilds,
+        audit.total_state_transitions
+    );
+    audit.interval_frames = 0;
+    audit.interval_spawned = 0;
+    audit.interval_despawned = 0;
+    audit.interval_reload_events = 0;
+    audit.interval_full_rebuilds = 0;
+    audit.interval_max_frame_ms = 0.0;
+    audit.interval_elapsed = 0.0;
+}
+
 #[derive(Resource, Default)]
 pub struct GameSession {
     pub pack_name: String,

@@ -2,7 +2,7 @@ use bevy::prelude::*;
 use robbo_core::{Cell, Direction, ElementKind, GameEvent, TileKind};
 
 use crate::assets::{SpriteAssets, bear_direction_rotation};
-use crate::bridge::{CoreBridge, EntityMap, GameSession, GameTickTimer, ReloadVisualsEvent, TileEntityMap, TICK_SECS};
+use crate::bridge::{CoreBridge, EntityMap, GameSession, GameTickTimer, ReloadVisualsEvent, RenderAudit, TileEntityMap, TICK_SECS};
 use crate::effects::{
     attach_butterfly_visual, reset_magnet_beams, CapsuleVisual, CollectPopEffect, FxParticle,
     MagnetBeams, MagnetVisual, TeleportAuraAnchor, projectile_sprite_bundle, projectile_visual_for,
@@ -203,6 +203,7 @@ pub fn sync_visuals(
         Without<TileVanishEffect>,
     >,
     level_roots: Query<Entity, With<LevelRoot>>,
+    mut audit: ResMut<RenderAudit>,
 ) {
     let has_events = !bridge.events_queue.is_empty();
 
@@ -228,11 +229,13 @@ pub fn sync_visuals(
     let current_ids: std::collections::HashSet<u32> =
         bridge.world.elements.iter().map(|(_, s)| s.id).collect();
 
+    let mut despawned = 0u32;
     entity_map.0.retain(|id, entity| {
         if current_ids.contains(id) {
             true
         } else {
             try_despawn(&mut commands, *entity);
+            despawned += 1;
             false
         }
     });
@@ -240,6 +243,7 @@ pub fn sync_visuals(
     let sim_tick = bridge.world.tick;
     let tile = projection.tile_size();
     let level_root = level_roots.iter().next();
+    let mut spawned = 0u32;
     for (cell, state) in &bridge.world.elements {
         if entity_map.0.contains_key(&state.id) {
             continue;
@@ -335,6 +339,7 @@ pub fn sync_visuals(
             commands.entity(id).set_parent(root);
         }
         entity_map.0.insert(state.id, id);
+        spawned += 1;
     }
 
     sync_tile_visuals(
@@ -413,6 +418,8 @@ pub fn sync_visuals(
     }
 
     bridge.events_queue.clear();
+    audit.interval_spawned += spawned;
+    audit.interval_despawned += despawned;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -559,6 +566,7 @@ pub fn rebuild_level_visuals(
     mut magnet_beams: ResMut<MagnetBeams>,
     level_roots: Query<Entity, With<LevelRoot>>,
     mut reload: EventReader<ReloadVisualsEvent>,
+    mut audit: ResMut<RenderAudit>,
 ) {
     if reload.read().next().is_none() {
         return;
@@ -574,6 +582,7 @@ pub fn rebuild_level_visuals(
         &mut entity_map,
         &mut tile_map,
     );
+    audit.interval_full_rebuilds += 1;
 }
 
 pub fn spawn_level_visuals(

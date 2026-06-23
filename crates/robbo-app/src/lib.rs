@@ -146,6 +146,7 @@ fn configure_app(app: &mut App, allow_any_thread: bool) {
         .insert_resource(SteeringState::default())
         .insert_resource(TestInputInject::default())
         .insert_resource(editor::EditorState::default())
+        .init_resource::<bridge::RenderAudit>()
         .init_resource::<MagnetBeams>()
         .add_event::<bridge::CoreGameEvent>()
         .add_event::<LoadLevelEvent>()
@@ -315,12 +316,7 @@ fn configure_app(app: &mut App, allow_any_thread: bool) {
             .add_systems(OnExit(AppState::Playing), touch_controls::cleanup_touch_controls)
             .add_systems(
                 Update,
-                (
-                    touch_controls::move_pad_input,
-                    touch_controls::move_pad_hold,
-                    touch_controls::shoot_pad_input,
-                )
-                    .run_if(in_state(AppState::Playing)),
+                touch_controls::donut_pad_touch.run_if(in_state(AppState::Playing)),
             );
     }
 }

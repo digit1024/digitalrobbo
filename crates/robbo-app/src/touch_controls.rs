@@ -1,65 +1,331 @@
-//! Android-only on-screen move and shoot pads.
+//! Android-only donut D-pads (move left, fire right).
 
+use bevy::asset::RenderAssetUsages;
 use bevy::prelude::*;
+use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat};
+use bevy::ui::widget::ImageNode;
+use bevy::ui::FocusPolicy;
 use bevy::window::PrimaryWindow;
 use robbo_core::Direction;
 
 use crate::app_state::AppState;
 use crate::bridge::CoreBridge;
-use crate::input::{apply_move_pad_hold, apply_move_pad_press, apply_move_pad_release, apply_shoot_pad_press, SteeringState};
+use crate::input::{
+    apply_move_pad_hold, apply_move_pad_press, apply_move_pad_release, apply_shoot_pad_press,
+    SteeringState,
+};
 use crate::ui::LevelCountdown;
-use crate::viewport;
+use crate::viewport::DESIGN_HEIGHT;
+
+/// Pad diameter at design resolution (1280×768).
+const PAD_DIAMETER_DESIGN: f32 = 300.0;
+/// Margin from screen edges (design px).
+const PAD_MARGIN_DESIGN: f32 = 24.0;
+/// Min gap between the two pads (design px).
+const PAD_GAP_DESIGN: f32 = 40.0;
+/// Each pad may use at most this fraction of screen height.
+const PAD_MAX_HEIGHT_FRAC: f32 = 0.36;
+/// Inner hole diameter / outer diameter (hand drawing ≈ ⅓).
+const INNER_HOLE_DIAMETER_FRAC: f32 = 1.0 / 3.0;
+/// Half-width of diagonal gap between wedges (radians).
+const GAP_HALF_ANGLE: f32 = 0.105;
+/// Raster resolution for pad textures.
+const TEX_SIZE: u32 = 512;
+
+/// Shared geometry: texture outer radius / texture half-size (must match rasterizer).
+const OUTER_RADIUS_FRAC: f32 = (TEX_SIZE as f32 * 0.5 - 2.0) / (TEX_SIZE as f32 * 0.5);
+/// Inner radius / outer radius (inner hole diameter is ⅓ of outer diameter).
+const INNER_RADIUS_RATIO: f32 = INNER_HOLE_DIAMETER_FRAC;
+
+#[derive(Clone, Copy)]
+struct PadLayout {
+    size: f32,
+    margin: f32,
+}
 
 #[derive(Component)]
 pub struct TouchControlsRoot;
 
-#[derive(Component, Clone, Copy)]
-pub enum MovePadDir {
+#[derive(Component, Clone, Copy, PartialEq, Eq, Debug)]
+pub enum PadQuarter {
     Up,
     Down,
     Left,
     Right,
 }
 
-#[derive(Component, Clone, Copy)]
-pub enum ShootPadDir {
-    Up,
-    Down,
-    Left,
-    Right,
+impl PadQuarter {
+    const ALL: [PadQuarter; 4] = [
+        PadQuarter::Up,
+        PadQuarter::Down,
+        PadQuarter::Left,
+        PadQuarter::Right,
+    ];
+}
+
+#[derive(Clone, Copy)]
+struct PadPalette {
+    segment: [u8; 4],
+    highlight: [u8; 4],
+}
+
+impl PadPalette {
+    fn move_pad() -> Self {
+        Self {
+            segment: [24, 42, 92, 235],
+            highlight: [70, 118, 210, 250],
+        }
+    }
+
+    fn fire_pad() -> Self {
+        Self {
+            segment: [118, 42, 18, 235],
+            highlight: [230, 108, 38, 250],
+        }
+    }
 }
 
 #[derive(Component)]
-pub(crate) struct PadButton {
-    pressed: bool,
+pub(crate) struct DonutPad {
+    is_move: bool,
 }
 
-fn dir_from_move(d: MovePadDir) -> Direction {
-    match d {
-        MovePadDir::Up => Direction::Up,
-        MovePadDir::Down => Direction::Down,
-        MovePadDir::Left => Direction::Left,
-        MovePadDir::Right => Direction::Right,
+#[derive(Component, Default)]
+pub(crate) struct DonutPadActive {
+    quarter: Option<PadQuarter>,
+}
+
+#[derive(Component, Default)]
+pub(crate) struct DonutPadTracking {
+    touch_id: Option<u64>,
+}
+
+#[derive(Component)]
+pub(crate) struct DonutQuarterOverlay {
+    quarter: PadQuarter,
+}
+
+fn design_to_screen(design: f32, window: &Window) -> f32 {
+    design * window.height() / DESIGN_HEIGHT
+}
+
+fn pad_radii(node: &ComputedNode) -> (f32, f32) {
+    let half = 0.5 * node.size().x.min(node.size().y);
+    let outer = half * OUTER_RADIUS_FRAC;
+    let inner = outer * INNER_RADIUS_RATIO;
+    (outer, inner)
+}
+
+fn quarter_to_direction(q: PadQuarter) -> Direction {
+    match q {
+        PadQuarter::Up => Direction::Up,
+        PadQuarter::Down => Direction::Down,
+        PadQuarter::Left => Direction::Left,
+        PadQuarter::Right => Direction::Right,
     }
 }
 
-fn dir_from_shoot(d: ShootPadDir) -> Direction {
-    match d {
-        ShootPadDir::Up => Direction::Up,
-        ShootPadDir::Down => Direction::Down,
-        ShootPadDir::Left => Direction::Left,
-        ShootPadDir::Right => Direction::Right,
+fn quarter_from_angle(angle: f32) -> PadQuarter {
+    const FRAC: f32 = std::f32::consts::FRAC_PI_4;
+    if angle >= -FRAC && angle < FRAC {
+        PadQuarter::Right
+    } else if angle >= FRAC && angle < 3.0 * FRAC {
+        PadQuarter::Down
+    } else if angle <= -FRAC && angle > -3.0 * FRAC {
+        PadQuarter::Up
+    } else {
+        PadQuarter::Left
     }
 }
 
-pub fn spawn_touch_controls(mut commands: Commands, window: Query<&Window, With<PrimaryWindow>>) {
+fn angle_near(a: f32, b: f32, eps: f32) -> bool {
+    let mut d = (a - b).abs();
+    if d > std::f32::consts::PI {
+        d = std::f32::consts::TAU - d;
+    }
+    d < eps
+}
+
+fn in_diagonal_gap(angle: f32) -> bool {
+    const FRAC: f32 = std::f32::consts::FRAC_PI_4;
+    angle_near(angle, FRAC, GAP_HALF_ANGLE)
+        || angle_near(angle, -FRAC, GAP_HALF_ANGLE)
+        || angle_near(angle, 3.0 * FRAC, GAP_HALF_ANGLE)
+        || angle_near(angle, -3.0 * FRAC, GAP_HALF_ANGLE)
+}
+
+fn smoothstep(edge0: f32, edge1: f32, x: f32) -> f32 {
+    if edge0 == edge1 {
+        return if x >= edge1 { 1.0 } else { 0.0 };
+    }
+    let t = ((x - edge0) / (edge1 - edge0)).clamp(0.0, 1.0);
+    t * t * (3.0 - 2.0 * t)
+}
+
+fn donut_pixel(
+    x: f32,
+    y: f32,
+    center: f32,
+    outer: f32,
+    inner: f32,
+    quarter_only: Option<PadQuarter>,
+    palette: PadPalette,
+    highlight: bool,
+) -> [u8; 4] {
+    let dx = x - center;
+    let dy = y - center;
+    let dist = (dx * dx + dy * dy).sqrt();
+
+    if dist < inner || dist > outer + 1.0 {
+        return [0, 0, 0, 0];
+    }
+
+    let angle = dy.atan2(dx);
+    if in_diagonal_gap(angle) {
+        return [0, 0, 0, 0];
+    }
+
+    let quarter = quarter_from_angle(angle);
+    if quarter_only.is_some_and(|q| q != quarter) {
+        return [0, 0, 0, 0];
+    }
+
+    let c = if highlight {
+        palette.highlight
+    } else {
+        palette.segment
+    };
+    let alpha = smoothstep(outer + 1.0, outer - 1.0, dist);
+    [c[0], c[1], c[2], (c[3] as f32 * alpha) as u8]
+}
+
+fn rasterize_donut(
+    palette: PadPalette,
+    quarter_only: Option<PadQuarter>,
+    highlight: bool,
+) -> Image {
+    let size = TEX_SIZE;
+    let center = size as f32 * 0.5;
+    let outer = center * OUTER_RADIUS_FRAC;
+    let inner = outer * INNER_RADIUS_RATIO;
+
+    let mut data = Vec::with_capacity((size * size * 4) as usize);
+    for y in 0..size {
+        for x in 0..size {
+            let px = x as f32 + 0.5;
+            let py = y as f32 + 0.5;
+            let rgba = donut_pixel(
+                px,
+                py,
+                center,
+                outer,
+                inner,
+                quarter_only,
+                palette,
+                highlight,
+            );
+            data.extend_from_slice(&rgba);
+        }
+    }
+
+    Image::new(
+        Extent3d {
+            width: size,
+            height: size,
+            depth_or_array_layers: 1,
+        },
+        TextureDimension::D2,
+        data,
+        TextureFormat::Rgba8UnormSrgb,
+        RenderAssetUsages::default(),
+    )
+}
+
+/// Same coordinate path as Bevy's `ui_focus_system` (physical viewport space).
+fn pointer_to_normalized(
+    pointer_logical: Vec2,
+    window: &Window,
+    camera: &Camera,
+    node: &ComputedNode,
+    global: &GlobalTransform,
+) -> Option<Vec2> {
+    let size = node.size();
+    if size.x <= 0.0 || size.y <= 0.0 {
+        return None;
+    }
+    let viewport_min = camera
+        .physical_viewport_rect()
+        .map(|rect| rect.min.as_vec2())
+        .unwrap_or_default();
+    let cursor = pointer_logical * window.scale_factor() - viewport_min;
+    let node_rect = Rect::from_center_size(global.translation().truncate(), size);
+    Some((cursor - node_rect.min) / size)
+}
+
+fn point_in_pad(norm: Vec2) -> bool {
+    (0.0..=1.0).contains(&norm.x) && (0.0..=1.0).contains(&norm.y)
+}
+
+fn donut_quarter_at_norm(norm: Vec2, node: &ComputedNode) -> Option<PadQuarter> {
+    if !point_in_pad(norm) {
+        return None;
+    }
+    let size = node.size();
+    let px = (norm.x - 0.5) * size.x;
+    let py = (norm.y - 0.5) * size.y;
+    let (outer, inner) = pad_radii(node);
+    let dist = Vec2::new(px, py).length();
+
+    // Dead center + diagonal gaps; outer bound matches drawn ring (no outward slop).
+    if dist < inner || dist > outer {
+        return None;
+    }
+
+    let angle = py.atan2(px);
+    if in_diagonal_gap(angle) {
+        return None;
+    }
+    Some(quarter_from_angle(angle))
+}
+
+fn set_quarter_overlays(
+    active: Option<PadQuarter>,
+    children: &Children,
+    overlays: &mut Query<(&DonutQuarterOverlay, &mut Visibility)>,
+) {
+    for child in children.iter() {
+        let Ok((overlay, mut vis)) = overlays.get_mut(*child) else {
+            continue;
+        };
+        *vis = if active == Some(overlay.quarter) {
+            Visibility::Visible
+        } else {
+            Visibility::Hidden
+        };
+    }
+}
+
+fn compute_pad_layout(window: &Window) -> PadLayout {
+    let w = window.width();
+    let h = window.height();
+    let margin = design_to_screen(PAD_MARGIN_DESIGN, window);
+    let gap = design_to_screen(PAD_GAP_DESIGN, window);
+    let desired = design_to_screen(PAD_DIAMETER_DESIGN, window);
+    let max_by_width = ((w - gap) * 0.5 - margin).max(160.0);
+    let max_by_height = (h * PAD_MAX_HEIGHT_FRAC - margin).max(160.0);
+    let size = desired.min(max_by_width).min(max_by_height);
+    PadLayout { size, margin }
+}
+
+pub fn spawn_touch_controls(
+    mut commands: Commands,
+    window: Query<&Window, With<PrimaryWindow>>,
+    mut images: ResMut<Assets<Image>>,
+) {
     let Ok(window) = window.get_single() else {
         return;
     };
-    let scale = viewport::ui_scale(window);
-    let margin = 24.0 * scale;
-    let pad = 150.0 * scale;
-    let btn = pad * 0.34;
+    let PadLayout { size, margin } = compute_pad_layout(window);
 
     commands
         .spawn((
@@ -73,251 +339,189 @@ pub fn spawn_touch_controls(mut commands: Commands, window: Query<&Window, With<
             TouchControlsRoot,
         ))
         .with_children(|root| {
-            spawn_directional_pad(
+            spawn_donut_pad(
                 root,
-                pad,
-                btn,
+                &mut images,
+                size,
                 margin,
                 true,
-                Color::srgba(0.08, 0.12, 0.22, 0.62),
-                Color::srgba(0.35, 0.65, 1.0, 0.85),
+                PadPalette::move_pad(),
             );
-            spawn_directional_pad(
+            spawn_donut_pad(
                 root,
-                pad,
-                btn,
+                &mut images,
+                size,
                 margin,
                 false,
-                Color::srgba(0.22, 0.10, 0.08, 0.62),
-                Color::srgba(1.0, 0.55, 0.25, 0.9),
+                PadPalette::fire_pad(),
             );
         });
 }
 
-fn spawn_directional_pad(
+fn spawn_donut_pad(
     parent: &mut ChildBuilder,
-    pad: f32,
-    btn: f32,
+    images: &mut Assets<Image>,
+    size: f32,
     margin: f32,
-    left_side: bool,
-    base: Color,
-    accent: Color,
+    is_move: bool,
+    palette: PadPalette,
 ) {
-    let horizontal = if left_side {
-        Val::Px(margin)
+    let (left, right) = if is_move {
+        (Val::Px(margin), Val::Auto)
     } else {
-        Val::Auto
+        (Val::Auto, Val::Px(margin))
     };
-    let horizontal_end = if left_side {
-        Val::Auto
-    } else {
-        Val::Px(margin)
-    };
+
+    let base = images.add(rasterize_donut(palette, None, false));
 
     parent
         .spawn((
             Node {
                 position_type: PositionType::Absolute,
-                left: horizontal,
-                right: horizontal_end,
+                left,
+                right,
                 bottom: Val::Px(margin),
-                width: Val::Px(pad),
-                height: Val::Px(pad),
-                justify_content: JustifyContent::Center,
-                align_items: AlignItems::Center,
+                width: Val::Px(size),
+                height: Val::Px(size),
                 ..default()
             },
-            BackgroundColor(base),
-            BorderRadius::all(Val::Px(pad * 0.18)),
+            BackgroundColor(Color::NONE),
+            FocusPolicy::Pass,
+            DonutPad { is_move },
+            DonutPadActive::default(),
+            DonutPadTracking::default(),
         ))
-        .with_children(|pad_root| {
-            let gap = pad * 0.04;
-            pad_root
-                .spawn(Node {
-                    width: Val::Px(btn * 3.0 + gap * 2.0),
-                    height: Val::Px(btn * 3.0 + gap * 2.0),
-                    flex_direction: FlexDirection::Column,
-                    align_items: AlignItems::Center,
-                    justify_content: JustifyContent::SpaceBetween,
+        .with_children(|pad| {
+            pad.spawn((
+                ImageNode {
+                    image: base,
                     ..default()
-                })
-                .with_children(|grid| {
-                    spawn_pad_btn(grid, btn, "▲", accent, left_side, 0);
-                    grid.spawn(Node {
-                        width: Val::Px(btn * 3.0 + gap * 2.0),
-                        flex_direction: FlexDirection::Row,
-                        justify_content: JustifyContent::SpaceBetween,
-                        align_items: AlignItems::Center,
+                },
+                Node {
+                    width: Val::Percent(100.0),
+                    height: Val::Percent(100.0),
+                    ..default()
+                },
+                FocusPolicy::Pass,
+            ));
+
+            for quarter in PadQuarter::ALL {
+                let overlay = images.add(rasterize_donut(palette, Some(quarter), true));
+                pad.spawn((
+                    ImageNode {
+                        image: overlay,
                         ..default()
-                    })
-                    .with_children(|row| {
-                        spawn_pad_btn(row, btn, "◀", accent, left_side, 2);
-                        row.spawn((
-                            Node {
-                                width: Val::Px(btn),
-                                height: Val::Px(btn),
-                                justify_content: JustifyContent::Center,
-                                align_items: AlignItems::Center,
-                                ..default()
-                            },
-                            BackgroundColor(Color::srgba(0.0, 0.0, 0.0, 0.15)),
-                            BorderRadius::all(Val::Px(btn * 0.2)),
-                        ))
-                        .with_children(|center| {
-                            center.spawn((
-                                Text::new(if left_side { "MOVE" } else { "FIRE" }),
-                                TextFont {
-                                    font_size: btn * 0.22,
-                                    ..default()
-                                },
-                                TextColor(Color::srgba(1.0, 1.0, 1.0, 0.75)),
-                            ));
-                        });
-                        spawn_pad_btn(row, btn, "▶", accent, left_side, 3);
-                    });
-                    spawn_pad_btn(grid, btn, "▼", accent, left_side, 1);
-                });
+                    },
+                    Node {
+                        position_type: PositionType::Absolute,
+                        width: Val::Percent(100.0),
+                        height: Val::Percent(100.0),
+                        ..default()
+                    },
+                    Visibility::Hidden,
+                    FocusPolicy::Pass,
+                    DonutQuarterOverlay { quarter },
+                ));
+            }
         });
 }
 
-fn spawn_pad_btn(
-    parent: &mut ChildBuilder,
-    size: f32,
-    label: &str,
-    accent: Color,
-    move_pad: bool,
-    dir_idx: u8,
+fn apply_quarter_change(
+    pad: &DonutPad,
+    prev: &mut DonutPadActive,
+    quarter: Option<PadQuarter>,
+    bridge: &mut CoreBridge,
+    steering: &mut SteeringState,
 ) {
-    let mut entity = parent.spawn((
-        Button,
-        Node {
-            width: Val::Px(size),
-            height: Val::Px(size),
-            justify_content: JustifyContent::Center,
-            align_items: AlignItems::Center,
-            border: UiRect::all(Val::Px(2.0)),
-            ..default()
-        },
-        BackgroundColor(Color::srgba(0.05, 0.05, 0.08, 0.55)),
-        BorderColor(Color::srgba(1.0, 1.0, 1.0, 0.12)),
-        BorderRadius::all(Val::Px(size * 0.22)),
-        PadButton { pressed: false },
-    ));
-    if move_pad {
-        entity.insert(match dir_idx {
-            0 => MovePadDir::Up,
-            1 => MovePadDir::Down,
-            2 => MovePadDir::Left,
-            _ => MovePadDir::Right,
-        });
-    } else {
-        entity.insert(match dir_idx {
-            0 => ShootPadDir::Up,
-            1 => ShootPadDir::Down,
-            2 => ShootPadDir::Left,
-            _ => ShootPadDir::Right,
-        });
-    }
-    entity.with_children(|btn| {
-        btn.spawn((
-            Text::new(label),
-            TextFont {
-                font_size: size * 0.42,
-                ..default()
-            },
-            TextColor(accent),
-        ));
-    });
-}
-
-pub fn move_pad_input(
-    state: Res<State<AppState>>,
-    countdown: Res<LevelCountdown>,
-    mut bridge: ResMut<CoreBridge>,
-    mut steering: ResMut<SteeringState>,
-    mut buttons: Query<
-        (
-            &Interaction,
-            &MovePadDir,
-            &mut PadButton,
-            &mut BackgroundColor,
-            &mut BorderColor,
-        ),
-        Changed<Interaction>,
-    >,
-) {
-    if *state.get() != AppState::Playing || countdown.blocks_input() {
+    if quarter == prev.quarter {
         return;
     }
-    for (interaction, dir, mut pad, mut bg, mut border) in &mut buttons {
-        let d = dir_from_move(*dir);
-        match *interaction {
-            Interaction::Pressed => {
-                if !pad.pressed {
-                    apply_move_pad_press(&mut bridge, &mut steering, d);
-                    pad.pressed = true;
-                }
-                apply_move_pad_hold(&mut steering, d);
-                *bg = BackgroundColor(Color::srgba(0.35, 0.65, 1.0, 0.35));
-                *border = BorderColor(Color::srgba(0.5, 0.8, 1.0, 0.9));
-            }
-            Interaction::None => {
-                if pad.pressed {
-                    apply_move_pad_release(&mut steering, d);
-                    pad.pressed = false;
-                }
-                *bg = BackgroundColor(Color::srgba(0.05, 0.05, 0.08, 0.55));
-                *border = BorderColor(Color::srgba(1.0, 1.0, 1.0, 0.12));
-            }
-            _ => {}
+    if let Some(old) = prev.quarter.take() {
+        if pad.is_move {
+            apply_move_pad_release(steering, quarter_to_direction(old));
+        }
+    }
+    prev.quarter = quarter;
+    if let Some(q) = quarter {
+        let dir = quarter_to_direction(q);
+        if pad.is_move {
+            apply_move_pad_press(bridge, steering, dir);
+        } else {
+            apply_shoot_pad_press(bridge, steering, dir);
         }
     }
 }
 
-pub fn move_pad_hold(
+pub fn donut_pad_touch(
     state: Res<State<AppState>>,
     countdown: Res<LevelCountdown>,
+    window: Query<&Window, With<PrimaryWindow>>,
+    camera: Query<&Camera, With<Camera2d>>,
+    touches: Res<Touches>,
+    mut bridge: ResMut<CoreBridge>,
     mut steering: ResMut<SteeringState>,
-    buttons: Query<(&Interaction, &MovePadDir, &PadButton)>,
+    mut pads: Query<(
+        &DonutPad,
+        &ComputedNode,
+        &GlobalTransform,
+        &mut DonutPadActive,
+        &mut DonutPadTracking,
+        &Children,
+    )>,
+    mut overlays: Query<(&DonutQuarterOverlay, &mut Visibility)>,
 ) {
     if *state.get() != AppState::Playing || countdown.blocks_input() {
         return;
     }
-    for (interaction, dir, pad) in &buttons {
-        if !pad.pressed {
+
+    let Ok(window) = window.get_single() else {
+        return;
+    };
+    let Ok(camera) = camera.get_single() else {
+        return;
+    };
+
+    for (pad, node, global, mut active, mut tracking, children) in &mut pads {
+        if let Some(id) = tracking.touch_id {
+            if touches.just_released(id) || touches.just_canceled(id) {
+                apply_quarter_change(pad, &mut active, None, &mut bridge, &mut steering);
+                set_quarter_overlays(None, children, &mut overlays);
+                tracking.touch_id = None;
+                continue;
+            }
+
+            let Some(touch) = touches.get_pressed(id) else {
+                apply_quarter_change(pad, &mut active, None, &mut bridge, &mut steering);
+                set_quarter_overlays(None, children, &mut overlays);
+                tracking.touch_id = None;
+                continue;
+            };
+
+            let norm = pointer_to_normalized(touch.position(), window, camera, node, global);
+            let quarter = norm.and_then(|n| donut_quarter_at_norm(n, node));
+            apply_quarter_change(pad, &mut active, quarter, &mut bridge, &mut steering);
+            set_quarter_overlays(active.quarter, children, &mut overlays);
+            if pad.is_move {
+                if let Some(q) = active.quarter {
+                    apply_move_pad_hold(&mut steering, quarter_to_direction(q));
+                }
+            }
             continue;
         }
-        if matches!(*interaction, Interaction::Pressed | Interaction::Hovered) {
-            apply_move_pad_hold(&mut steering, dir_from_move(*dir));
-        }
-    }
-}
 
-pub fn shoot_pad_input(
-    state: Res<State<AppState>>,
-    countdown: Res<LevelCountdown>,
-    mut bridge: ResMut<CoreBridge>,
-    mut steering: ResMut<SteeringState>,
-    mut buttons: Query<
-        (&Interaction, &ShootPadDir, &mut BackgroundColor, &mut BorderColor),
-        Changed<Interaction>,
-    >,
-) {
-    if *state.get() != AppState::Playing || countdown.blocks_input() {
-        return;
-    }
-    for (interaction, dir, mut bg, mut border) in &mut buttons {
-        match *interaction {
-            Interaction::Pressed => {
-                apply_shoot_pad_press(&mut bridge, &mut steering, dir_from_shoot(*dir));
-                *bg = BackgroundColor(Color::srgba(1.0, 0.45, 0.15, 0.45));
-                *border = BorderColor(Color::srgba(1.0, 0.7, 0.3, 0.95));
+        for touch in touches.iter_just_pressed() {
+            let Some(norm) = pointer_to_normalized(touch.position(), window, camera, node, global)
+            else {
+                continue;
+            };
+            if !point_in_pad(norm) {
+                continue;
             }
-            Interaction::None => {
-                *bg = BackgroundColor(Color::srgba(0.05, 0.05, 0.08, 0.55));
-                *border = BorderColor(Color::srgba(1.0, 1.0, 1.0, 0.12));
-            }
-            _ => {}
+            tracking.touch_id = Some(touch.id());
+            let quarter = donut_quarter_at_norm(norm, node);
+            apply_quarter_change(pad, &mut active, quarter, &mut bridge, &mut steering);
+            set_quarter_overlays(active.quarter, children, &mut overlays);
+            break;
         }
     }
 }
