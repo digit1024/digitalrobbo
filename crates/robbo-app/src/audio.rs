@@ -158,7 +158,7 @@ pub fn load_audio_manifest(
 pub fn unlock_audio_on_input(
     keys: Res<ButtonInput<KeyCode>>,
     mouse: Res<ButtonInput<MouseButton>>,
-    #[cfg(target_os = "android")] touches: Res<Touches>,
+    #[cfg(any(target_arch = "wasm32", target_os = "android"))] touches: Res<Touches>,
     mut gate: ResMut<AudioGate>,
 ) {
     if gate.unlocked {
@@ -168,7 +168,7 @@ pub fn unlock_audio_on_input(
         gate.unlocked = true;
         return;
     }
-    #[cfg(target_os = "android")]
+    #[cfg(any(target_arch = "wasm32", target_os = "android"))]
     if touches.iter_just_pressed().next().is_some() {
         gate.unlocked = true;
     }
