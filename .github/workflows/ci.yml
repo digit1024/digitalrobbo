@@ -14,6 +14,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
+      - name: Install Linux dependencies
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libwayland-dev libasound2-dev libudev-dev libxkbcommon-dev
       - name: cargo check
         run: unset ARGV0 && cargo check --workspace
       - name: cargo test
@@ -45,7 +47,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
-      - name: Install xvfb
-        run: sudo apt-get update && sudo apt-get install -y xvfb libvulkan1 mesa-vulkan-drivers
+      - name: Install system dependencies
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends xvfb libvulkan1 mesa-vulkan-drivers libwayland-dev libasound2-dev libudev-dev libxkbcommon-dev
       - name: Game smoke test (boot, level, move, screenshot)
         run: chmod +x scripts/run_game_smoke_test.sh && scripts/run_game_smoke_test.sh
