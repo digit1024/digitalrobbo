@@ -4,10 +4,8 @@ dist = "dist"
 
 [serve]
 port = 8080
+# Bevy needs real 404s for missing files, not SPA fallback to index.html.
+no_spa = true
 
 [watch]
 ignore = ["dist"]
-
-[[copy]]
-source = "assets"
-destination = "assets"

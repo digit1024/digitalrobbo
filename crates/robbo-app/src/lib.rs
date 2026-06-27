@@ -34,6 +34,7 @@ use audio::{
     resume_bgm_on_unpause, sfx_on_core_events, start_level_bgm_after_countdown, stop_bgm,
     unlock_audio_on_input, update_enemy_ambient_sounds,
 };
+use bevy::asset::AssetMetaCheck;
 use bevy::log::LogPlugin;
 use bevy::prelude::*;
 use bevy::window::WindowResolution;
@@ -91,7 +92,8 @@ fn asset_root() -> String {
     }
     #[cfg(all(target_arch = "wasm32", not(target_os = "android")))]
     {
-        return concat!(env!("CARGO_MANIFEST_DIR"), "/../../assets").to_string();
+        // HTTP path served by Trunk (`[[copy]]` in Trunk.toml), not a host filesystem path.
+        return "assets".to_string();
     }
     #[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
     {
@@ -110,6 +112,10 @@ fn configure_app(app: &mut App, allow_any_thread: bool) {
         })
         .set(AssetPlugin {
             file_path: asset_root(),
+            // Trunk's dev server returns index.html (200) for missing `.meta` files; Bevy
+            // then fails to deserialize that HTML. We have no `.meta` files in this project.
+            #[cfg(target_arch = "wasm32")]
+            meta_check: AssetMetaCheck::Never,
             ..default()
         })
         .set(WindowPlugin {
