@@ -1284,6 +1284,268 @@ mod tests {
     }
 
     #[test]
+    fn bird_cannot_enter_screw() {
+        let w = 6u16;
+        let h = 4u16;
+        let tiles = vec![TileKind::Empty; (w * h) as usize];
+        let elements = vec![
+            (
+                Cell::new(1, 1),
+                ElementState::new(
+                    2,
+                    ElementKind::Bird {
+                        variant: BirdVariant::Horizontal,
+                        shooting: false,
+                    },
+                    Direction::Right,
+                ),
+            ),
+            (
+                Cell::new(2, 1),
+                ElementState::new(3, ElementKind::Screw, Direction::Down),
+            ),
+        ];
+        let mut world = make_world(w, h, tiles, elements, 1);
+        assert!(world.is_blocked_for_enemy(Cell::new(2, 1)));
+        for _ in 0..20 {
+            world.step(PlayerInput::Wait);
+        }
+        assert!(
+            world.elements.iter().all(|(c, s)| {
+                !(matches!(s.kind, ElementKind::Bird { .. }) && *c == Cell::new(2, 1))
+            }),
+            "bird must not occupy screw cell"
+        );
+        assert!(
+            world
+                .elements
+                .iter()
+                .any(|(c, s)| *c == Cell::new(2, 1) && matches!(s.kind, ElementKind::Screw)),
+            "screw must remain on board"
+        );
+    }
+
+    #[test]
+    fn butterfly_cannot_enter_screw() {
+        let w = 6u16;
+        let h = 4u16;
+        let tiles = vec![TileKind::Empty; (w * h) as usize];
+        let elements = vec![
+            (
+                Cell::new(1, 1),
+                ElementState::new(2, ElementKind::Butterfly, Direction::Right),
+            ),
+            (
+                Cell::new(2, 1),
+                ElementState::new(3, ElementKind::Screw, Direction::Down),
+            ),
+        ];
+        let mut world = make_world(w, h, tiles, elements, 1);
+        assert!(world.is_blocked_for_enemy(Cell::new(2, 1)));
+        for _ in 0..20 {
+            world.step(PlayerInput::Wait);
+        }
+        assert!(
+            world.elements.iter().all(|(c, s)| {
+                !(matches!(s.kind, ElementKind::Butterfly) && *c == Cell::new(2, 1))
+            }),
+            "butterfly must not occupy screw cell"
+        );
+    }
+
+    #[test]
+    fn bird_cannot_enter_questionmark() {
+        let w = 6u16;
+        let h = 4u16;
+        let tiles = vec![TileKind::Empty; (w * h) as usize];
+        let elements = vec![
+            (
+                Cell::new(1, 1),
+                ElementState::new(
+                    2,
+                    ElementKind::Bird {
+                        variant: BirdVariant::Horizontal,
+                        shooting: false,
+                    },
+                    Direction::Right,
+                ),
+            ),
+            (
+                Cell::new(2, 1),
+                ElementState::new(
+                    3,
+                    ElementKind::QuestionMark {
+                        content: QuestionMarkContent::Screw,
+                    },
+                    Direction::Down,
+                ),
+            ),
+        ];
+        let mut world = make_world(w, h, tiles, elements, 0);
+        assert!(world.is_blocked_for_enemy(Cell::new(2, 1)));
+        for _ in 0..20 {
+            world.step(PlayerInput::Wait);
+        }
+        assert!(
+            world.elements.iter().all(|(c, s)| {
+                !(matches!(s.kind, ElementKind::Bird { .. }) && *c == Cell::new(2, 1))
+            }),
+            "bird must not walk onto question mark"
+        );
+    }
+
+    #[test]
+    fn opposing_solid_lasers_retract() {
+        let w = 8u16;
+        let h = 4u16;
+        let tiles = vec![TileKind::Empty; (w * h) as usize];
+        let elements = vec![
+            (
+                Cell::new(1, 1),
+                ElementState::new(
+                    2,
+                    ElementKind::Gun {
+                        gun_type: GunType::Laser,
+                        direction: Direction::Right,
+                        move_dir: Direction::Right,
+                        movable: false,
+                        rotatable: false,
+                        random_rotate: false,
+                    },
+                    Direction::Right,
+                ),
+            ),
+            (
+                Cell::new(6, 1),
+                ElementState::new(
+                    3,
+                    ElementKind::Gun {
+                        gun_type: GunType::Laser,
+                        direction: Direction::Left,
+                        move_dir: Direction::Left,
+                        movable: false,
+                        rotatable: false,
+                        random_rotate: false,
+                    },
+                    Direction::Left,
+                ),
+            ),
+        ];
+        let mut world = make_world(w, h, tiles, elements, 0);
+        let mut events = Vec::new();
+        world.gun_shoot(
+            Cell::new(1, 1),
+            Direction::Right,
+            GunType::Laser,
+            Some(2),
+            &mut events,
+            true,
+        );
+        world.gun_shoot(
+            Cell::new(6, 1),
+            Direction::Left,
+            GunType::Laser,
+            Some(3),
+            &mut events,
+            true,
+        );
+        for _ in 0..16 {
+            world.step(PlayerInput::Wait);
+        }
+        assert!(
+            !world.elements.iter().any(|(_, s)| {
+                matches!(
+                    s.kind,
+                    ElementKind::Laser {
+                        solid: true,
+                        ..
+                    }
+                )
+            }),
+            "opposing solid laser beams should retract after meeting, not freeze"
+        );
+    }
+
+    #[test]
+    fn perpendicular_laser_cross_retracts() {
+        let w = 8u16;
+        let h = 6u16;
+        let tiles = vec![TileKind::Empty; (w * h) as usize];
+        let elements = vec![
+            (
+                Cell::new(1, 2),
+                ElementState::new(
+                    2,
+                    ElementKind::Gun {
+                        gun_type: GunType::Laser,
+                        direction: Direction::Right,
+                        move_dir: Direction::Right,
+                        movable: false,
+                        rotatable: false,
+                        random_rotate: false,
+                    },
+                    Direction::Right,
+                ),
+            ),
+            (
+                Cell::new(4, 0),
+                ElementState::new(
+                    3,
+                    ElementKind::Gun {
+                        gun_type: GunType::Laser,
+                        direction: Direction::Down,
+                        move_dir: Direction::Down,
+                        movable: false,
+                        rotatable: false,
+                        random_rotate: false,
+                    },
+                    Direction::Down,
+                ),
+            ),
+        ];
+        let mut world = make_world(w, h, tiles, elements, 0);
+        let mut events = Vec::new();
+        world.gun_shoot(
+            Cell::new(1, 2),
+            Direction::Right,
+            GunType::Laser,
+            Some(2),
+            &mut events,
+            true,
+        );
+        world.gun_shoot(
+            Cell::new(4, 0),
+            Direction::Down,
+            GunType::Laser,
+            Some(3),
+            &mut events,
+            true,
+        );
+        for _ in 0..20 {
+            world.step(PlayerInput::Wait);
+        }
+        let cross = Cell::new(4, 2);
+        let on_cross = world
+            .elements
+            .iter()
+            .filter(|(c, s)| {
+                *c == cross
+                    && matches!(
+                        s.kind,
+                        ElementKind::Laser {
+                            solid: true,
+                            ..
+                        }
+                    )
+            })
+            .count();
+        assert!(
+            on_cross <= 1,
+            "perpendicular beams must not stack frozen at crossing (found {on_cross})"
+        );
+    }
+
+    #[test]
     fn magnet_beam_stops_at_wall_and_object() {
         let w = 8u16;
         let h = 3u16;

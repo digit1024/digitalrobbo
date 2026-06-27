@@ -250,6 +250,7 @@ impl World {
         false
     }
 
+    /// gnurobbo `can_move` — enemies only enter `EMPTY_FIELD` cells (no objects).
     pub(crate) fn is_blocked_for_enemy(&self, cell: Cell) -> bool {
         if !self.in_bounds(cell) {
             return true;
@@ -257,18 +258,10 @@ impl World {
         if self.tile_at(cell).is_some_and(|t| t.blocks_movement()) {
             return true;
         }
-        if let Some((_, el)) = self.element_at(cell) {
-            if el.hidden {
-                return false;
-            }
-            if matches!(el.kind, ElementKind::Robbo) {
-                return true;
-            }
-            return !Self::is_walkable_element(&el.kind);
-        }
-        false
+        self.element_at(cell).is_some()
     }
 
+    /// Collectibles Robbo walks through to pick up (not used for enemy pathfinding).
     pub(crate) fn is_walkable_element(kind: &ElementKind) -> bool {
         matches!(
             kind,

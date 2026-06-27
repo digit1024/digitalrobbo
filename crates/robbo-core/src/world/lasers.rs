@@ -267,7 +267,16 @@ impl World {
             }
 
             if let Some((_, el)) = self.element_at(next) {
-                if matches!(el.kind, ElementKind::Laser { solid: true, .. }) {
+                if let ElementKind::Laser {
+                    direction: other_dir,
+                    solid: true,
+                    ..
+                } = el.kind
+                {
+                    // gnurobbo board.c: same-direction beams stop; opposing/crossing retract.
+                    if other_dir != direction {
+                        self.set_laser_returning(id);
+                    }
                     continue;
                 }
                 if Self::is_laser_destroyable(&el.kind) {

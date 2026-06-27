@@ -185,13 +185,7 @@ impl World {
     }
 
     fn is_bear_maze_empty(&self, cell: Cell) -> bool {
-        if !self.in_bounds(cell) {
-            return false;
-        }
-        if self.tile_at(cell).is_some_and(|t| t.blocks_movement()) {
-            return false;
-        }
-        self.element_at(cell).is_none()
+        !self.is_blocked_for_enemy(cell)
     }
 
     fn butterfly_move(&self, cell: Cell, direction: Direction) -> Cell {
