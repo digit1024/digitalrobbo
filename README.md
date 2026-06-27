@@ -8,6 +8,16 @@ A small remake of the classic puzzle game **Robbo**, written in Rust with [Bevy]
 
 **[Watch a short gameplay video →](https://youtu.be/SSQ8WgN_zac)**
 
+<p align="center">
+  <a href="https://github.com/digit1024/digitalrobbo/actions/workflows/ci.yml"><img src="https://github.com/digit1024/digitalrobbo/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-GPL--3.0--or--later-blue.svg" alt="License: GPL-3.0-or-later"></a>
+  <a href="https://www.rust-lang.org/"><img src="https://img.shields.io/badge/Rust-2021-orange?logo=rust" alt="Rust 2021"></a>
+  <a href="https://bevyengine.org/"><img src="https://img.shields.io/badge/Bevy-0.18-blue" alt="Bevy 0.18"></a>
+  <a href="#build"><img src="https://img.shields.io/badge/Desktop-Linux%20%7C%20Windows%20%7C%20macOS-lightgrey" alt="Desktop"></a>
+  <a href="#web-wasm"><img src="https://img.shields.io/badge/WASM-browser-yellow" alt="WASM"></a>
+  <a href="#android"><img src="https://img.shields.io/badge/Android-API%2031%2B-green?logo=android" alt="Android API 31+"></a>
+</p>
+
 ## Standing on open source
 
 Robbo was created by **Janusz Pelc** for the Atari platform. Years later, the **[GNU Robbo](https://gnurobbo.sourceforge.net/)** project kept the game alive: open levels, open logic, and a community that still cares. DigitalRobbo would not exist without that work.
