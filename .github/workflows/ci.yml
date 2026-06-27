@@ -33,14 +33,30 @@ jobs:
 
   android:
     runs-on: ubuntu-latest
-    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: aarch64-linux-android
+      - name: Install Android NDK
+        uses: nttld/setup-ndk@v1
+        id: setup-ndk
+        with:
+          ndk-version: r27c
+          add-to-path: true
       - name: android compile check
-        run: unset ARGV0 && cargo check -p robbo-app --target aarch64-linux-android
+        env:
+          ANDROID_NDK_ROOT: ${{ steps.setup-ndk.outputs.ndk-path }}
+          ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
+        run: |
+          TOOLCHAIN="${{ steps.setup-ndk.outputs.ndk-path }}/toolchains/llvm/prebuilt/linux-x86_64/bin"
+          export PATH="$TOOLCHAIN:$PATH"
+          export CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER="$TOOLCHAIN/aarch64-linux-android31-clang"
+          export CC_aarch64_linux_android="$TOOLCHAIN/aarch64-linux-android31-clang"
+          export CXX_aarch64_linux_android="$TOOLCHAIN/aarch64-linux-android31-clang++"
+          export AR_aarch64_linux_android="$TOOLCHAIN/llvm-ar"
+          unset ARGV0
+          cargo check -p robbo-app --target aarch64-linux-android
 
   game-smoke:
     runs-on: ubuntu-latest
