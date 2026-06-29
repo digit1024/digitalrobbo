@@ -12,11 +12,12 @@ permissions:
 
 concurrency:
   group: pages
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
@@ -27,8 +28,14 @@ jobs:
         with:
           targets: wasm32-unknown-unknown
 
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: .
+
       - name: Install trunk
-        run: cargo install trunk --locked
+        uses: jetli/trunk-action@v0.5.1
+        with:
+          version: latest
 
       - name: Build WASM for GitHub Pages
         run: |
@@ -36,6 +43,8 @@ jobs:
           RUSTFLAGS="" trunk build --release --public-url /digitalrobbo/
 
       - uses: actions/configure-pages@v5
+        with:
+          enablement: true
 
       - uses: actions/upload-pages-artifact@v3
         with:
