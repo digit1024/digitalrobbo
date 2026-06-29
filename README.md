@@ -6,10 +6,11 @@
 
 A small remake of the classic puzzle game **Robbo**, written in Rust with [Bevy](https://bevyengine.org/). It is not meant to replace anything — just a personal attempt to bring those levels to more screens, with touch controls on Android and a browser build for WASM.
 
-**[Watch a short gameplay video →](https://youtu.be/SSQ8WgN_zac)**
+**[Watch a short gameplay video →](https://youtu.be/SSQ8WgN_zac)** · **[Play in browser →](https://digit1024.github.io/digitalrobbo/)**
 
 <p align="center">
   <a href="https://github.com/digit1024/digitalrobbo/actions/workflows/ci.yml"><img src="https://github.com/digit1024/digitalrobbo/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="https://github.com/digit1024/digitalrobbo/actions/workflows/pages.yml"><img src="https://github.com/digit1024/digitalrobbo/actions/workflows/pages.yml/badge.svg" alt="Pages"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-GPL--3.0--or--later-blue.svg" alt="License: GPL-3.0-or-later"></a>
   <a href="https://www.rust-lang.org/"><img src="https://img.shields.io/badge/Rust-2021-orange?logo=rust" alt="Rust 2021"></a>
   <a href="https://bevyengine.org/"><img src="https://img.shields.io/badge/Bevy-0.18-blue" alt="Bevy 0.18"></a>
@@ -69,11 +70,19 @@ Uses `xvfb-run` when available (CI and headless Linux). Logic tests remain in `r
 
 ## Web (WASM)
 
+**Live demo:** https://digit1024.github.io/digitalrobbo/ (click once to enable audio)
+
+Local dev:
+
 ```bash
+cargo install trunk
 rustup target add wasm32-unknown-unknown
 # Clear RUSTFLAGS if your system linker uses mold (breaks wasm-ld)
-RUSTFLAGS="" trunk serve crates/robbo-app/index.html
+unset ARGV0 NO_COLOR
+RUSTFLAGS="" trunk serve
 ```
+
+Pushes to `main` deploy automatically via [`.github/workflows/pages.yml`](.github/workflows/pages.yml). Enable **Settings → Pages → Build and deployment → GitHub Actions** on first setup.
 
 ## Android
 
