@@ -4,7 +4,7 @@ use bevy::prelude::*;
 use robbo_core::{Direction, GameEvent, PlayerInput};
 
 use crate::app_state::AppState;
-use crate::input::SteeringState;
+use crate::input::{player_move_on_tick, SteeringState};
 use crate::ui::LevelCountdown;
 
 pub const TICK_SECS: f32 = 0.1; // 10 Hz sim — enemy delays scaled from GNU 25 Hz
@@ -166,6 +166,7 @@ pub fn game_tick_system(
     mut steering: ResMut<SteeringState>,
     mut tick_timer: ResMut<GameTickTimer>,
     mut core_events: MessageWriter<CoreGameEvent>,
+    keys: Res<ButtonInput<KeyCode>>,
     state: Res<State<AppState>>,
     countdown: Res<LevelCountdown>,
     time: Res<Time>,
@@ -182,9 +183,7 @@ pub fn game_tick_system(
     let input = if steering.shoot_pending {
         steering.shoot_pending = false;
         PlayerInput::Shoot(bridge.last_direction)
-    } else if let Some(dir) = steering.hold {
-        PlayerInput::Move(dir)
-    } else if let Some(dir) = steering.tap_move.take() {
+    } else if let Some(dir) = player_move_on_tick(&keys, &mut steering, bridge.facing_direction) {
         PlayerInput::Move(dir)
     } else {
         PlayerInput::Wait

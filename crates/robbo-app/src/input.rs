@@ -35,13 +35,15 @@ pub fn apply_test_input(mut keys: ResMut<ButtonInput<KeyCode>>, mut inject: ResM
     }
 }
 
-/// Latched player steering — consumed on sim tick boundaries only.
+/// Latched player steering — movement is decided on sim tick boundaries only.
 #[derive(Resource, Default, Clone)]
 pub struct SteeringState {
-    /// Direction key held after the initial press frame.
+    /// Touch D-pad: direction held while finger is down (sampled on sim tick only).
     pub hold: Option<Direction>,
-    /// One-step move from tap-same-direction (consumed on next tick).
+    /// Locked one-step move from a same-direction tap; survives key/finger release until the next sim tick (turn cancels).
     pub tap_move: Option<Direction>,
+    /// Suppresses movement on the sim tick immediately after a turn.
+    pub skip_move_on_tick: bool,
     /// Shoot on next tick.
     pub shoot_pending: bool,
 }
@@ -96,15 +98,34 @@ fn pressed_dir(keys: &ButtonInput<KeyCode>, dir: Direction) -> bool {
     keys.pressed(a) || keys.pressed(b)
 }
 
-fn just_released_dir(keys: &ButtonInput<KeyCode>, dir: Direction) -> bool {
-    let [a, b] = keys_for_dir(dir);
-    keys.just_released(a) || keys.just_released(b)
-}
-
-fn turn_robbo(bridge: &mut CoreBridge, dir: Direction) {
+fn turn_robbo(bridge: &mut CoreBridge, steering: &mut SteeringState, dir: Direction) {
     bridge.world.turn_robbo(dir);
     bridge.facing_direction = dir;
     bridge.last_direction = dir;
+    steering.skip_move_on_tick = true;
+    steering.tap_move = None;
+}
+
+/// Decide whether Robbo steps this sim tick. Keyboard uses live key state; touch uses `hold`.
+pub(crate) fn player_move_on_tick(
+    keys: &ButtonInput<KeyCode>,
+    steering: &mut SteeringState,
+    facing: Direction,
+) -> Option<Direction> {
+    if steering.skip_move_on_tick {
+        steering.skip_move_on_tick = false;
+        return None;
+    }
+
+    let wants = pressed_dir(keys, facing)
+        || steering.hold == Some(facing)
+        || steering.tap_move == Some(facing);
+    if wants {
+        steering.tap_move = None;
+        Some(facing)
+    } else {
+        None
+    }
 }
 
 /// Touch move pad: tap a new direction to turn, same direction to step.
@@ -117,8 +138,9 @@ pub(crate) fn apply_move_pad_press(
     if dir == bridge.facing_direction {
         steering.tap_move = Some(dir);
     } else {
-        turn_robbo(bridge, dir);
+        turn_robbo(bridge, steering, dir);
     }
+    steering.hold = Some(dir);
 }
 
 #[cfg_attr(not(target_os = "android"), allow(dead_code))]
@@ -131,9 +153,6 @@ pub(crate) fn apply_move_pad_release(steering: &mut SteeringState, dir: Directio
     if steering.hold == Some(dir) {
         steering.hold = None;
     }
-    if steering.tap_move == Some(dir) {
-        steering.tap_move = None;
-    }
 }
 
 /// Touch shoot pad: face direction and fire on press.
@@ -143,7 +162,7 @@ pub(crate) fn apply_shoot_pad_press(
     steering: &mut SteeringState,
     dir: Direction,
 ) {
-    turn_robbo(bridge, dir);
+    turn_robbo(bridge, steering, dir);
     steering.shoot_pending = true;
 }
 
@@ -154,39 +173,12 @@ fn update_steering(keys: &ButtonInput<KeyCode>, bridge: &mut CoreBridge, steerin
         Direction::Left,
         Direction::Right,
     ] {
-        if just_released_dir(keys, dir) {
-            if steering.hold == Some(dir) {
-                steering.hold = None;
-            }
-            if steering.tap_move == Some(dir) {
-                steering.tap_move = None;
-            }
-        }
-    }
-
-    for dir in [
-        Direction::Up,
-        Direction::Down,
-        Direction::Left,
-        Direction::Right,
-    ] {
         if just_pressed_dir(keys, dir) {
             if dir == bridge.facing_direction {
                 steering.tap_move = Some(dir);
             } else {
-                turn_robbo(bridge, dir);
+                turn_robbo(bridge, steering, dir);
             }
-        }
-    }
-
-    for dir in [
-        Direction::Up,
-        Direction::Down,
-        Direction::Left,
-        Direction::Right,
-    ] {
-        if pressed_dir(keys, dir) && !just_pressed_dir(keys, dir) {
-            steering.hold = Some(dir);
         }
     }
 }
