@@ -2,7 +2,9 @@
 mod tests {
     use super::super::*;
     use crate::command::CommandHistory;
-    use crate::element::{BirdVariant, ElementKind, ElementState, GunType, QuestionMarkContent};
+    use crate::element::{
+        BirdVariant, ElementKind, ElementState, GunType, QuestionMarkContent,
+    };
     use crate::events::{DeathCause, GameEvent, PlayerInput};
     use crate::tile::TileKind;
     use crate::world::{LevelStatus, World};
@@ -178,6 +180,147 @@ mod tests {
             .elements
             .iter()
             .any(|(c, s)| *c == Cell::new(3, 1) && matches!(s.kind, ElementKind::PushBox)));
+        let (_, state) = world
+            .elements
+            .iter()
+            .find(|(_, s)| matches!(s.kind, ElementKind::PushBox))
+            .unwrap();
+        assert!(state.sliding);
+    }
+
+    #[test]
+    fn pushbox_slides_multiple_cells_in_corridor() {
+        let w = 10u16;
+        let h = 4u16;
+        let tiles = vec![TileKind::Empty; (w * h) as usize];
+        let elements = vec![
+            (Cell::new(1, 1), robbo_at(Cell::new(1, 1))),
+            (
+                Cell::new(2, 1),
+                ElementState::new(2, ElementKind::PushBox, Direction::Down),
+            ),
+        ];
+        let mut world = make_world(w, h, tiles, elements, 0);
+        world.step(PlayerInput::Move(Direction::Right));
+
+        let pushbox_cell = |world: &World| {
+            world
+                .elements
+                .iter()
+                .find(|(_, s)| matches!(s.kind, ElementKind::PushBox))
+                .map(|(c, _)| *c)
+        };
+
+        assert_eq!(pushbox_cell(&world), Some(Cell::new(3, 1)));
+
+        // First auto-slide: counter is 1 after the push step, so one wait is enough.
+        world.step(PlayerInput::Wait);
+        assert_eq!(pushbox_cell(&world), Some(Cell::new(4, 1)));
+
+        // Further slides wait `delay` ticks between cells.
+        world.step(PlayerInput::Wait);
+        world.step(PlayerInput::Wait);
+        assert_eq!(pushbox_cell(&world), Some(Cell::new(5, 1)));
+        assert!(
+            world
+                .elements
+                .iter()
+                .any(|(_, s)| matches!(s.kind, ElementKind::PushBox) && s.sliding)
+        );
+    }
+
+    #[test]
+    fn pushbox_stops_and_shoots_at_ground() {
+        let w = 8u16;
+        let h = 4u16;
+        let mut tiles = vec![TileKind::Empty; (w * h) as usize];
+        tiles[12] = TileKind::Ground; // (4, 1)
+        let elements = vec![
+            (Cell::new(1, 1), robbo_at(Cell::new(1, 1))),
+            (
+                Cell::new(2, 1),
+                ElementState::new(2, ElementKind::PushBox, Direction::Down),
+            ),
+        ];
+        let mut world = make_world(w, h, tiles, elements, 0);
+        world.step(PlayerInput::Move(Direction::Right));
+        world.step(PlayerInput::Wait);
+
+        let (cell, state) = world
+            .elements
+            .iter()
+            .find(|(_, s)| matches!(s.kind, ElementKind::PushBox))
+            .unwrap();
+        assert_eq!(*cell, Cell::new(3, 1));
+        assert!(!state.sliding);
+        assert_eq!(world.tile_at(Cell::new(4, 1)), Some(TileKind::Empty));
+        assert!(
+            world
+                .elements
+                .iter()
+                .any(|(c, s)| *c == Cell::new(4, 1) && matches!(s.kind, ElementKind::Laser { solid: false, .. }))
+        );
+    }
+
+    #[test]
+    fn pushbox_stops_without_shoot_off_board() {
+        let w = 5u16;
+        let h = 4u16;
+        let tiles = vec![TileKind::Empty; (w * h) as usize];
+        let elements = vec![
+            (Cell::new(1, 1), robbo_at(Cell::new(1, 1))),
+            (
+                Cell::new(2, 1),
+                ElementState::new(2, ElementKind::PushBox, Direction::Down),
+            ),
+        ];
+        let mut world = make_world(w, h, tiles, elements, 0);
+        world.step(PlayerInput::Move(Direction::Right));
+
+        world.step(PlayerInput::Wait);
+        assert!(
+            world
+                .elements
+                .iter()
+                .any(|(c, s)| *c == Cell::new(4, 1) && matches!(s.kind, ElementKind::PushBox))
+        );
+        world.step(PlayerInput::Wait);
+        world.step(PlayerInput::Wait);
+
+        let (cell, state) = world
+            .elements
+            .iter()
+            .find(|(_, s)| matches!(s.kind, ElementKind::PushBox))
+            .unwrap();
+        assert_eq!(*cell, Cell::new(4, 1));
+        assert!(!state.sliding);
+        assert!(!world
+            .elements
+            .iter()
+            .any(|(_, s)| matches!(s.kind, ElementKind::Laser { .. })));
+    }
+
+    #[test]
+    fn regular_box_does_not_slide() {
+        let w = 8u16;
+        let h = 4u16;
+        let tiles = vec![TileKind::Empty; (w * h) as usize];
+        let elements = vec![
+            (Cell::new(1, 1), robbo_at(Cell::new(1, 1))),
+            (
+                Cell::new(2, 1),
+                ElementState::new(2, ElementKind::Box, Direction::Down),
+            ),
+        ];
+        let mut world = make_world(w, h, tiles, elements, 0);
+        world.step(PlayerInput::Move(Direction::Right));
+        for _ in 0..10 {
+            world.step(PlayerInput::Wait);
+        }
+        assert!(world
+            .elements
+            .iter()
+            .any(|(c, s)| *c == Cell::new(3, 1) && matches!(s.kind, ElementKind::Box)));
     }
 
     #[test]
@@ -810,6 +953,31 @@ mod tests {
             .collect();
         assert_eq!(blasters.len(), 1);
         assert_eq!(blasters[0].0, Cell::new(3, 1));
+    }
+
+    #[test]
+    fn blaster_wave_clears_ground_on_propagation() {
+        let w = 8u16;
+        let h = 4u16;
+        let mut tiles = vec![TileKind::Empty; (w * h) as usize];
+        tiles[14] = TileKind::Ground; // (4, 1)
+        let elements = vec![(
+            Cell::new(3, 1),
+            ElementState::new(
+                2,
+                ElementKind::BlasterCell {
+                    direction: Direction::Right,
+                    frame: 0,
+                },
+                Direction::Right,
+            ),
+        )];
+        let mut world = make_world(w, h, tiles, elements, 0);
+        world.step(PlayerInput::Wait);
+        assert_eq!(world.tile_at(Cell::new(4, 1)), Some(TileKind::Empty));
+        assert!(world.elements.iter().any(|(c, s)| {
+            *c == Cell::new(4, 1) && matches!(s.kind, ElementKind::BlasterCell { .. })
+        }));
     }
 
     #[test]

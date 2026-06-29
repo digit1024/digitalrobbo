@@ -2,7 +2,6 @@ use crate::cell::Cell;
 use crate::direction::Direction;
 use crate::element::{ElementKind, ElementState, GunType};
 use crate::events::{DeathCause, GameEvent};
-use crate::tile::TileKind;
 use crate::world::World;
 
 impl World {
@@ -102,10 +101,9 @@ impl World {
             return;
         }
 
-        if self.tile_at(target) == Some(TileKind::Ground)
-            || self
-                .tile_at(target)
-                .is_some_and(|t| t == TileKind::Barrier)
+        if self
+            .tile_at(target)
+            .is_some_and(Self::is_tile_shot_destroyable)
         {
             self.clear_blowable_tile(target, events);
         }
@@ -175,10 +173,9 @@ impl World {
                 self.remove_element_by_id(id);
                 continue;
             }
-            if self.tile_at(next) == Some(TileKind::Ground)
-                || self
-                    .tile_at(next)
-                    .is_some_and(|t| t == TileKind::Barrier)
+            if self
+                .tile_at(next)
+                .is_some_and(Self::is_tile_shot_destroyable)
             {
                 self.clear_blowable_tile(next, events);
                 self.remove_element_by_id(id);
@@ -289,10 +286,9 @@ impl World {
                 continue;
             }
 
-            if self.tile_at(next) == Some(TileKind::Ground)
-                || self
-                    .tile_at(next)
-                    .is_some_and(|t| t == TileKind::Barrier)
+            if self
+                .tile_at(next)
+                .is_some_and(Self::is_tile_shot_destroyable)
             {
                 self.clear_blowable_tile(next, events);
             }
@@ -380,7 +376,11 @@ impl World {
                 return;
             }
 
-            if self.in_bounds(next) && !self.tile_at(next).is_some_and(|t| t.blocks_shot()) {
+            // gnurobbo: blaster extends one cell only at state/frame 0.
+            if frame == 0
+                && self.in_bounds(next)
+                && !self.tile_at(next).is_some_and(|t| t.blocks_shot())
+            {
                 if let Some((_, el)) = self.element_at(next) {
                     if Self::is_blaster_immune(&el.kind) {
                         // stop propagation
@@ -391,6 +391,7 @@ impl World {
                         self.place_blaster_cell(next, direction);
                     }
                 } else {
+                    self.destroy_at(next, events);
                     self.place_blaster_cell(next, direction);
                 }
             }

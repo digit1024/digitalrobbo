@@ -1,6 +1,6 @@
 use crate::cell::Cell;
 use crate::direction::Direction;
-use crate::element::{ElementKind, GunType};
+use crate::element::{push_box_slide_delay, ElementKind, GunType};
 use crate::events::{DeathCause, GameEvent};
 use crate::tile::TileKind;
 use crate::world::{World, MAX_TELEPORT_INDEX};
@@ -176,6 +176,8 @@ impl World {
         if is_push_box {
             self.elements[obj_idx].1.sliding = true;
             self.elements[obj_idx].1.direction = dir;
+            // gnurobbo: `moved = DELAY_PUSHBOX` after landing — first auto-slide waits.
+            self.elements[obj_idx].1.tick_counter = push_box_slide_delay();
         }
         self.elements[robbo_idx].0 = target;
         self.elements[robbo_idx].1.direction = dir;

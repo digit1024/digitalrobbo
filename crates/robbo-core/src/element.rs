@@ -209,6 +209,11 @@ pub fn bomb_chain_delay_ticks() -> u32 {
     gnurobbo_delay_to_ticks(5)
 }
 
+/// gnurobbo `DELAY_PUSHBOX`: ticks between sliding push-box steps (and glide duration).
+pub fn push_box_slide_delay() -> u32 {
+    gnurobbo_delay_to_ticks(4)
+}
+
 #[cfg(test)]
 mod timing_tests {
     use super::*;
@@ -216,6 +221,7 @@ mod timing_tests {
     #[test]
     fn gnurobbo_delay_four_maps_to_two_sim_ticks() {
         assert_eq!(gnurobbo_delay_to_ticks(4), 2);
+        assert_eq!(push_box_slide_delay(), 2);
         assert_eq!(enemy_move_delay(&ElementKind::Bear { clockwise: false }), 2);
     }
 }

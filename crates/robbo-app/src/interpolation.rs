@@ -1,5 +1,5 @@
 use bevy::prelude::*;
-use robbo_core::{Cell, ElementKind, ElementState, enemy_move_delay};
+use robbo_core::{Cell, ElementKind, ElementState, enemy_move_delay, push_box_slide_delay};
 
 use crate::bridge::{CoreBridge, GameTickTimer, TICK_SECS};
 use crate::projection::ActiveProjection;
@@ -71,7 +71,7 @@ pub fn visual_step_ticks(kind: &ElementKind, state: &ElementState) -> u32 {
             enemy_move_delay(kind)
         }
         ElementKind::Butterfly => enemy_move_delay(kind),
-        ElementKind::PushBox if state.sliding => 4,
+        ElementKind::PushBox if state.sliding => push_box_slide_delay(),
         ElementKind::Gun { movable: true, .. } => 8,
         // Regular / gun bolts — one cell per sim tick (Robbo also steps every tick).
         ElementKind::Laser { solid: false, .. } => 1,

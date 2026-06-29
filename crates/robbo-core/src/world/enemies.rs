@@ -39,6 +39,7 @@ impl World {
                 | ElementKind::BlackBear { .. }
                 | ElementKind::Bird { .. }
                 | ElementKind::Butterfly => crate::element::enemy_move_delay(&state.kind),
+                ElementKind::PushBox => continue,
                 _ => {
                     updates.push((id, tick_counter, state.direction, None));
                     continue;
