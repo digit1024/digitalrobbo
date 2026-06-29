@@ -412,6 +412,20 @@ impl World {
         true
     }
 
+    /// gnurobbo `can_move` for teleport exits — strictly empty (no screw, ground, objects).
+    pub(crate) fn can_teleport_exit(&self, cell: Cell) -> bool {
+        if !self.in_bounds(cell) {
+            return false;
+        }
+        if self.robbo_cell() == Some(cell) {
+            return false;
+        }
+        if self.is_blocked(cell) {
+            return false;
+        }
+        self.element_at(cell).is_none()
+    }
+
     fn tick_pending_spawns(&mut self, events: &mut Vec<GameEvent>) {
         let mut done = Vec::new();
         for (i, (_, state)) in self.elements.iter().enumerate() {

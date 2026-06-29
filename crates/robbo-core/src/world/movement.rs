@@ -224,7 +224,7 @@ impl World {
                 let exit_dir = Self::gnurobbo_to_direction(dir_idx);
                 let (dc, dr) = exit_dir.delta();
                 let dest = portal_cell.offset(dc, dr);
-                if self.can_robbo_stand(dest) {
+                if self.can_teleport_exit(dest) {
                     self.elements[robbo_idx].0 = dest;
                     self.elements[robbo_idx].1.direction = exit_dir;
                     events.push(GameEvent::Teleported {

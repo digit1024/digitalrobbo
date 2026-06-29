@@ -230,7 +230,7 @@ mod tests {
     }
 
     #[test]
-    fn pushbox_stops_and_shoots_at_ground() {
+    fn pushbox_stops_and_clears_ground_without_laser() {
         let w = 8u16;
         let h = 4u16;
         let mut tiles = vec![TileKind::Empty; (w * h) as usize];
@@ -254,11 +254,82 @@ mod tests {
         assert_eq!(*cell, Cell::new(3, 1));
         assert!(!state.sliding);
         assert_eq!(world.tile_at(Cell::new(4, 1)), Some(TileKind::Empty));
+        assert!(!world
+            .elements
+            .iter()
+            .any(|(_, s)| matches!(s.kind, ElementKind::Laser { .. })));
+    }
+
+    #[test]
+    fn pushbox_stops_at_wall_without_laser() {
+        let w = 6u16;
+        let h = 4u16;
+        let mut tiles = vec![TileKind::Empty; (w * h) as usize];
+        tiles[9] = TileKind::WallSolid; // (3, 1)
+        let elements = vec![
+            (Cell::new(0, 1), robbo_at(Cell::new(0, 1))),
+            (
+                Cell::new(1, 1),
+                ElementState::new(2, ElementKind::PushBox, Direction::Down),
+            ),
+        ];
+        let mut world = make_world(w, h, tiles, elements, 0);
+        world.step(PlayerInput::Move(Direction::Right));
+        world.step(PlayerInput::Wait);
         assert!(
             world
                 .elements
                 .iter()
-                .any(|(c, s)| *c == Cell::new(4, 1) && matches!(s.kind, ElementKind::Laser { solid: false, .. }))
+                .any(|(c, s)| *c == Cell::new(2, 1) && matches!(s.kind, ElementKind::PushBox))
+        );
+        assert!(!world
+            .elements
+            .iter()
+            .any(|(_, s)| matches!(s.kind, ElementKind::Laser { .. })));
+    }
+
+    #[test]
+    fn teleport_wont_land_on_screw() {
+        let w = 8u16;
+        let h = 4u16;
+        let tiles = vec![TileKind::Empty; (w * h) as usize];
+        let elements = vec![
+            (Cell::new(0, 1), robbo_at(Cell::new(0, 1))),
+            (
+                Cell::new(1, 1),
+                ElementState::new(
+                    2,
+                    ElementKind::Teleport {
+                        group: 1,
+                        pair_index: 0,
+                    },
+                    Direction::Down,
+                ),
+            ),
+            (
+                Cell::new(3, 1),
+                ElementState::new(
+                    3,
+                    ElementKind::Teleport {
+                        group: 1,
+                        pair_index: 1,
+                    },
+                    Direction::Down,
+                ),
+            ),
+            (
+                Cell::new(4, 1),
+                ElementState::new(4, ElementKind::Screw, Direction::Down),
+            ),
+        ];
+        let mut world = make_world(w, h, tiles, elements, 0);
+        world.step(PlayerInput::Move(Direction::Right));
+        assert_ne!(world.robbo_cell(), Some(Cell::new(4, 1)));
+        assert!(
+            world
+                .elements
+                .iter()
+                .any(|(c, s)| *c == Cell::new(4, 1) && matches!(s.kind, ElementKind::Screw))
         );
     }
 
