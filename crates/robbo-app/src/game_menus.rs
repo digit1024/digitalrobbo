@@ -221,7 +221,7 @@ fn spawn_victory_menu(
                     width: Val::Px(panel_w),
                     height: Val::Px(panel_h),
                     flex_direction: FlexDirection::Column,
-                    align_items: AlignItems::Center,
+                    align_items: AlignItems::Stretch,
                     justify_content: JustifyContent::FlexStart,
                     padding: UiRect::all(Val::Px(36.0 * scale)),
                     ..default()
@@ -271,6 +271,7 @@ fn spawn_victory_menu(
                 panel
                     .spawn((
                         Node {
+                            align_self: AlignSelf::Center,
                             flex_direction: FlexDirection::Row,
                             justify_content: JustifyContent::Center,
                             align_items: AlignItems::Center,
@@ -355,7 +356,7 @@ fn spawn_defeat_menu(
                     width: Val::Px(panel_w),
                     height: Val::Px(panel_h),
                     flex_direction: FlexDirection::Column,
-                    align_items: AlignItems::Center,
+                    align_items: AlignItems::Stretch,
                     justify_content: JustifyContent::FlexStart,
                     padding: UiRect::all(Val::Px(36.0 * scale)),
                     ..default()
@@ -403,6 +404,7 @@ fn spawn_defeat_menu(
                 panel
                     .spawn((
                         Node {
+                            align_self: AlignSelf::Center,
                             flex_direction: FlexDirection::Row,
                             justify_content: JustifyContent::Center,
                             align_items: AlignItems::Center,
@@ -566,7 +568,12 @@ fn spawn_stat_row(
                         font_size,
                         ..default()
                     },
+                    TextLayout::new_with_justify(Justify::Right),
                     TextColor(Color::srgb(0.92, 0.92, 1.0)),
+                    Node {
+                        width: Val::Percent(100.0),
+                        ..default()
+                    },
                 ));
             });
             row.spawn((
@@ -584,7 +591,12 @@ fn spawn_stat_row(
                         font_size,
                         ..default()
                     },
+                    TextLayout::new_with_justify(Justify::Left),
                     TextColor(Color::srgb(0.97, 0.97, 1.0)),
+                    Node {
+                        width: Val::Percent(100.0),
+                        ..default()
+                    },
                 ));
             });
         });
