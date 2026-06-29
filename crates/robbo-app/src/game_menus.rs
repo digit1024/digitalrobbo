@@ -541,7 +541,7 @@ fn spawn_stats_block(
         ))
         .with_children(|block| {
             for (label, value) in rows {
-                spawn_stat_row(block, font, row_size, label, value);
+                spawn_stat_row(block, font, row_size, scale, label, value);
             }
         });
 }
@@ -550,6 +550,7 @@ fn spawn_stat_row(
     parent: &mut ChildSpawnerCommands,
     font: &GameFont,
     font_size: f32,
+    scale: f32,
     label: &str,
     value: &str,
 ) {
@@ -558,30 +559,58 @@ fn spawn_stat_row(
             Node {
                 width: Val::Percent(100.0),
                 flex_direction: FlexDirection::Row,
-                justify_content: JustifyContent::SpaceBetween,
                 align_items: AlignItems::Center,
                 ..default()
             },
         ))
         .with_children(|row| {
             row.spawn((
-                Text::new(label),
-                TextFont {
-                    font: font.0.clone(),
-                    font_size,
+                Node {
+                    width: Val::Percent(58.0),
+                    justify_content: JustifyContent::FlexEnd,
+                    padding: UiRect::right(Val::Px(10.0 * scale)),
                     ..default()
                 },
-                TextColor(Color::srgb(0.92, 0.92, 1.0)),
-            ));
+            ))
+            .with_children(|cell| {
+                cell.spawn((
+                    Text::new(label),
+                    TextFont {
+                        font: font.0.clone(),
+                        font_size,
+                        ..default()
+                    },
+                    TextLayout::new_with_justify(Justify::Right),
+                    TextColor(Color::srgb(0.92, 0.92, 1.0)),
+                    Node {
+                        width: Val::Percent(100.0),
+                        ..default()
+                    },
+                ));
+            });
             row.spawn((
-                Text::new(value),
-                TextFont {
-                    font: font.0.clone(),
-                    font_size,
+                Node {
+                    width: Val::Percent(42.0),
+                    justify_content: JustifyContent::FlexStart,
                     ..default()
                 },
-                TextColor(Color::srgb(0.97, 0.97, 1.0)),
-            ));
+            ))
+            .with_children(|cell| {
+                cell.spawn((
+                    Text::new(value),
+                    TextFont {
+                        font: font.0.clone(),
+                        font_size,
+                        ..default()
+                    },
+                    TextLayout::new_with_justify(Justify::Left),
+                    TextColor(Color::srgb(0.97, 0.97, 1.0)),
+                    Node {
+                        width: Val::Percent(100.0),
+                        ..default()
+                    },
+                ));
+            });
         });
 }
 
