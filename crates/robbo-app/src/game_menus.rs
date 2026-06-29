@@ -152,7 +152,7 @@ fn spawn_pause_menu(
                         ..default()
                     },
                 ));
-                spawn_title(panel, font, title_size, "PAUSED");
+                spawn_title(panel, font, title_size, scale, "PAUSED");
                 spawn_text_button(panel, font, item_size, "RESUME", GameMenuAction::Resume);
                 spawn_text_button(panel, font, item_size, "Reset", GameMenuAction::Restart);
                 spawn_text_button(panel, font, item_size, "Main Menu", GameMenuAction::MainMenu);
@@ -186,6 +186,10 @@ fn spawn_victory_menu(
     let best_time_secs = progress.map(|p| p.best_time_ms / 1000).unwrap_or(0);
     let best_tries = progress.map(|p| p.best_tries).unwrap_or(session.tries);
     let time_secs = timer.elapsed_ms / 1000;
+    let best_time = format!("{best_time_secs}");
+    let best_tries_str = format!("{best_tries}");
+    let time_str = format!("{time_secs}");
+    let tries_str = format!("{}", session.tries);
 
     commands
         .spawn((
@@ -217,7 +221,8 @@ fn spawn_victory_menu(
                     width: Val::Px(panel_w),
                     height: Val::Px(panel_h),
                     flex_direction: FlexDirection::Column,
-                    align_items: AlignItems::Stretch,
+                    align_items: AlignItems::Center,
+                    justify_content: JustifyContent::FlexStart,
                     padding: UiRect::all(Val::Px(36.0 * scale)),
                     ..default()
                 },
@@ -235,21 +240,42 @@ fn spawn_victory_menu(
                         ..default()
                     },
                 ));
-                spawn_title(panel, font, title_size, "WELL DONE!!!");
-                spawn_stat_row(panel, font, row_size, "BEST TIME:", &format!("{best_time_secs}"));
-                spawn_stat_row(panel, font, row_size, "MIN TRIES:", &format!("{best_tries}"));
-                spawn_stat_row(panel, font, row_size, "TIME:", &format!("{time_secs}"));
-                spawn_stat_row(panel, font, row_size, "TRIES:", &format!("{}", session.tries));
+                spawn_title(panel, font, title_size, scale, "WELL DONE!!!");
+                panel
+                    .spawn((
+                        Node {
+                            width: Val::Percent(100.0),
+                            flex_grow: 1.0,
+                            flex_direction: FlexDirection::Column,
+                            justify_content: JustifyContent::Center,
+                            align_items: AlignItems::Center,
+                            ..default()
+                        },
+                    ))
+                    .with_children(|stats_zone| {
+                        spawn_stats_block(
+                            stats_zone,
+                            font,
+                            row_size,
+                            scale,
+                            panel_w,
+                            &[
+                                ("BEST TIME:", best_time.as_str()),
+                                ("MIN TRIES:", best_tries_str.as_str()),
+                                ("TIME:", time_str.as_str()),
+                                ("TRIES:", tries_str.as_str()),
+                            ],
+                        );
+                    });
 
                 panel
                     .spawn((
                         Node {
-                            margin: UiRect::top(Val::Px(24.0 * scale)),
-                            flex_grow: 1.0,
                             flex_direction: FlexDirection::Row,
                             justify_content: JustifyContent::Center,
-                            align_items: AlignItems::FlexEnd,
+                            align_items: AlignItems::Center,
                             column_gap: Val::Px(18.0 * scale),
+                            padding: UiRect::top(Val::Px(8.0 * scale)),
                             ..default()
                         },
                     ))
@@ -296,6 +322,8 @@ fn spawn_defeat_menu(
     let panel_h = PANEL_H * scale;
     let btn = 58.0 * scale;
     let time_secs = timer.elapsed_ms / 1000;
+    let time_str = format!("{time_secs}");
+    let tries_str = format!("{}", session.tries);
 
     commands
         .spawn((
@@ -327,7 +355,8 @@ fn spawn_defeat_menu(
                     width: Val::Px(panel_w),
                     height: Val::Px(panel_h),
                     flex_direction: FlexDirection::Column,
-                    align_items: AlignItems::Stretch,
+                    align_items: AlignItems::Center,
+                    justify_content: JustifyContent::FlexStart,
                     padding: UiRect::all(Val::Px(36.0 * scale)),
                     ..default()
                 },
@@ -345,19 +374,40 @@ fn spawn_defeat_menu(
                         ..default()
                     },
                 ));
-                spawn_title(panel, font, title_size, "GAME OVER");
-                spawn_stat_row(panel, font, row_size, "TIME:", &format!("{time_secs}"));
-                spawn_stat_row(panel, font, row_size, "TRIES:", &format!("{}", session.tries));
+                spawn_title(panel, font, title_size, scale, "GAME OVER");
+                panel
+                    .spawn((
+                        Node {
+                            width: Val::Percent(100.0),
+                            flex_grow: 1.0,
+                            flex_direction: FlexDirection::Column,
+                            justify_content: JustifyContent::Center,
+                            align_items: AlignItems::Center,
+                            ..default()
+                        },
+                    ))
+                    .with_children(|stats_zone| {
+                        spawn_stats_block(
+                            stats_zone,
+                            font,
+                            row_size,
+                            scale,
+                            panel_w,
+                            &[
+                                ("TIME:", time_str.as_str()),
+                                ("TRIES:", tries_str.as_str()),
+                            ],
+                        );
+                    });
 
                 panel
                     .spawn((
                         Node {
-                            margin: UiRect::top(Val::Px(32.0 * scale)),
-                            flex_grow: 1.0,
                             flex_direction: FlexDirection::Row,
                             justify_content: JustifyContent::Center,
-                            align_items: AlignItems::FlexEnd,
+                            align_items: AlignItems::Center,
                             column_gap: Val::Px(18.0 * scale),
+                            padding: UiRect::top(Val::Px(8.0 * scale)),
                             ..default()
                         },
                     ))
@@ -430,7 +480,13 @@ fn spawn_level_select_menu(
     ));
 }
 
-fn spawn_title(parent: &mut ChildSpawnerCommands, font: &GameFont, font_size: f32, text: &str) {
+fn spawn_title(
+    parent: &mut ChildSpawnerCommands,
+    font: &GameFont,
+    font_size: f32,
+    scale: f32,
+    text: &str,
+) {
     parent.spawn((
         Text::new(text),
         TextFont {
@@ -438,45 +494,99 @@ fn spawn_title(parent: &mut ChildSpawnerCommands, font: &GameFont, font_size: f3
             font_size,
             ..default()
         },
+        TextLayout::new_with_justify(Justify::Center),
         TextColor(Color::srgb(0.97, 0.97, 1.0)),
         Node {
-            margin: UiRect::bottom(Val::Px(12.0)),
+            width: Val::Percent(100.0),
+            margin: UiRect::bottom(Val::Px(12.0 * scale)),
             ..default()
         },
     ));
 }
 
-fn spawn_stat_row(parent: &mut ChildSpawnerCommands, font: &GameFont, font_size: f32, label: &str, value: &str) {
+fn stats_block_width(panel_w: f32, scale: f32) -> f32 {
+    (panel_w * 0.72).clamp(280.0 * scale, panel_w - 48.0 * scale)
+}
+
+fn spawn_stats_block(
+    parent: &mut ChildSpawnerCommands,
+    font: &GameFont,
+    row_size: f32,
+    scale: f32,
+    panel_w: f32,
+    rows: &[(&str, &str)],
+) {
+    parent
+        .spawn((
+            Node {
+                width: Val::Px(stats_block_width(panel_w, scale)),
+                flex_direction: FlexDirection::Column,
+                row_gap: Val::Px(6.0 * scale),
+                ..default()
+            },
+        ))
+        .with_children(|block| {
+            for (label, value) in rows {
+                spawn_stat_row(block, font, row_size, scale, label, value);
+            }
+        });
+}
+
+fn spawn_stat_row(
+    parent: &mut ChildSpawnerCommands,
+    font: &GameFont,
+    font_size: f32,
+    scale: f32,
+    label: &str,
+    value: &str,
+) {
     parent
         .spawn((
             Node {
                 width: Val::Percent(100.0),
                 flex_direction: FlexDirection::Row,
-                justify_content: JustifyContent::SpaceBetween,
                 align_items: AlignItems::Center,
-                margin: UiRect::vertical(Val::Px(4.0)),
                 ..default()
             },
         ))
         .with_children(|row| {
             row.spawn((
-                Text::new(label),
-                TextFont {
-                    font: font.0.clone(),
-                    font_size,
+                Node {
+                    width: Val::Percent(58.0),
+                    justify_content: JustifyContent::FlexEnd,
+                    padding: UiRect::right(Val::Px(10.0 * scale)),
                     ..default()
                 },
-                TextColor(Color::srgb(0.92, 0.92, 1.0)),
-            ));
+            ))
+            .with_children(|cell| {
+                cell.spawn((
+                    Text::new(label),
+                    TextFont {
+                        font: font.0.clone(),
+                        font_size,
+                        ..default()
+                    },
+                    TextColor(Color::srgb(0.92, 0.92, 1.0)),
+                ));
+            });
             row.spawn((
-                Text::new(value),
-                TextFont {
-                    font: font.0.clone(),
-                    font_size,
+                Node {
+                    width: Val::Percent(42.0),
+                    justify_content: JustifyContent::FlexStart,
                     ..default()
                 },
-                TextColor(Color::srgb(0.97, 0.97, 1.0)),
-            ));
+            ))
+            .with_children(|cell| {
+                cell.spawn((
+                    Text::new(value),
+                    TextFont {
+                        font: font.0.clone(),
+                        font_size,
+                        ..default()
+                    },
+                    TextColor(Color::srgb(0.97, 0.97, 1.0)),
+                ));
+            });
         });
 }
 
